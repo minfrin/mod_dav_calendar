@@ -1,5 +1,7 @@
+.autotools
 .cproject
 .project
+.settings
 Makefile
 Makefile.in
 autom4te.cache
