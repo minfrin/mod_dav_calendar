@@ -31,13 +31,158 @@
 #include "http_request.h"
 #include "util_script.h"
 
+#include "mod_dav.h"
+
 module AP_MODULE_DECLARE_DATA dav_calendar_module;
+
+/* forward-declare the hook structures */
+static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
+
+/*
+** The namespace URIs that we use. This list and the enumeration must
+** stay in sync.
+*/
+static const char * const dav_calendar_namespace_uris[] =
+{
+    "urn:ietf:params:xml:ns:caldav",
+
+    NULL        /* sentinel */
+};
+enum {
+    DAV_CALENDAR_URI_DAV            /* the DAV: namespace URI */
+};
+
+enum {
+    DAV_CALENDAR_PROPID_calendar_description = 1,
+    DAV_CALENDAR_PROPID_calendar_home_set,
+    DAV_CALENDAR_PROPID_calendar_timezone,
+    DAV_CALENDAR_PROPID_getctag,
+    DAV_CALENDAR_PROPID_max_attendees_per_instance,
+    DAV_CALENDAR_PROPID_max_date_time,
+    DAV_CALENDAR_PROPID_max_instances,
+    DAV_CALENDAR_PROPID_max_resource_size,
+    DAV_CALENDAR_PROPID_min_date_time,
+    DAV_CALENDAR_PROPID_supported_calendar_component_set,
+    DAV_CALENDAR_PROPID_supported_calendar_data,
+    DAV_CALENDAR_PROPID_supported_collation_set
+};
+
+static const dav_liveprop_spec dav_calendar_props[] =
+{
+    /* standard calendar properties */
+    {
+        DAV_CALENDAR_URI_DAV,
+        "calendar-description",
+		DAV_CALENDAR_PROPID_calendar_description,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "calendar-home-set",
+		DAV_CALENDAR_PROPID_calendar_home_set,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "calendar-timezone",
+		DAV_CALENDAR_PROPID_calendar_timezone,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "getctag",
+		DAV_CALENDAR_PROPID_getctag,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "max-attendees-per-instance",
+		DAV_CALENDAR_PROPID_max_attendees_per_instance,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "max-date-time",
+		DAV_CALENDAR_PROPID_max_date_time,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "max-instances",
+		DAV_CALENDAR_PROPID_max_instances,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "max-resource-size",
+		DAV_CALENDAR_PROPID_max_resource_size,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "min-date-time",
+		DAV_CALENDAR_PROPID_min_date_time,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "supported-calendar-component-set",
+		DAV_CALENDAR_PROPID_supported_calendar_component_set,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "supported-calendar-data",
+		DAV_CALENDAR_PROPID_supported_calendar_data,
+        0
+    },
+    {
+        DAV_CALENDAR_URI_DAV,
+        "supported-collation-set",
+		DAV_CALENDAR_PROPID_supported_collation_set,
+        0
+    },
+
+    { 0 }        /* sentinel */
+};
+
+static const dav_liveprop_group dav_calendar_liveprop_group =
+{
+    dav_calendar_props,
+	dav_calendar_namespace_uris,
+    &dav_hooks_liveprop_calendar
+};
+
 
 typedef struct
 {
     int dav_calendar_set :1;
     int dav_calendar;
 } dav_calendar_config_rec;
+
+static dav_error *dav_calendar_options_header(request_rec *r,
+		const dav_resource *resource, apr_text_header *phdr)
+{
+    apr_text_append(r->pool, phdr, "calendar-access");
+
+    return NULL;
+}
+
+static dav_error *dav_calendar_options_method(request_rec *r,
+		const dav_resource *resource, apr_text_header *phdr)
+{
+//    apr_text_append(r->pool, phdr, "MKCALENDAR");
+//    apr_text_append(r->pool, phdr, "REPORT");
+
+    return NULL;
+}
+
+static dav_options_provider options =
+{
+    dav_calendar_options_header,
+    dav_calendar_options_method,
+    NULL
+};
 
 static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
 {
@@ -90,6 +235,10 @@ static int dav_calendar_handler(request_rec *r)
 static void register_hooks(apr_pool_t *p)
 {
     ap_hook_handler(dav_calendar_handler, NULL, NULL, APR_HOOK_MIDDLE);
+
+    dav_register_liveprop_group(p, &dav_calendar_liveprop_group);
+
+    dav_options_provider_register(p, "dav_calendar", &options);
 }
 
 AP_DECLARE_MODULE(dav_calendar) =
