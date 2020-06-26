@@ -451,21 +451,21 @@ static int dav_calendar_query_report(const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output, dav_error **err)
 {
 
-	return DONE;
+    return HTTP_NOT_IMPLEMENTED;
 }
 
 static int dav_calendar_multiget_report(const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output, dav_error **err)
 {
 
-	return DONE;
+    return HTTP_NOT_IMPLEMENTED;
 }
 
 static int dav_calendar_free_busy_query_report(const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output, dav_error **err)
 {
 
-	return DONE;
+    return HTTP_NOT_IMPLEMENTED;
 }
 
 static int dav_calendar_find_ns(const apr_array_header_t *namespaces, const char *uri)
@@ -537,7 +537,7 @@ static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *reso
 
 	/* a calendar resource must not already exist */
 	if (resource->exists) {
-        return dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
+        return dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
                              apr_psprintf(r->pool,
                              "Calendar collection already exists: %s",
                              ap_escape_html(r->pool, resource->uri)));
@@ -794,6 +794,11 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
                               err);
     }
 
+	/* already exists and is a collection? we're done */
+	if (resource->exists && resource->collection) {
+	    return NULL;
+	}
+
     /* sanity check parents */
     mkcols = apr_array_make(r->pool, 2, sizeof(dav_resource *));
     if ((err = dav_calendar_check_calender(r, resource, provider, mkcols))) {
@@ -822,7 +827,7 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
     return NULL;
 }
 
-static int dav_calendar_auto_provision(request_rec *r,
+static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
         dav_error **err)
 {
 	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
@@ -978,8 +983,21 @@ static int dav_calendar_handler(request_rec *r)
 
 }
 
+static int dav_calendar_fixups(request_rec *r)
+{
+	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+            &dav_calendar_module);
+
+	if (conf->dav_calendar) {
+		AP_REQUEST_SET_BNOTE(r, AP_REQUEST_STRONG_ETAG, AP_REQUEST_STRONG_ETAG);
+	}
+
+	return OK;
+}
+
 static void register_hooks(apr_pool_t *p)
 {
+    ap_hook_fixups(dav_calendar_fixups, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_handler(dav_calendar_handler, NULL, NULL, APR_HOOK_MIDDLE);
 
     dav_register_liveprop_group(p, &dav_calendar_liveprop_group);
