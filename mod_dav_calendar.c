@@ -50,6 +50,9 @@ static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
 #define DAV_XML_NAMESPACE "DAV:"
 #define DAV_CALENDAR_XML_NAMESPACE "urn:ietf:params:xml:ns:caldav"
 
+/* MKCALENDAR method */
+static int iM_MKCALENDAR;
+
 /*
 ** The namespace URIs that we use. This list and the enumeration must
 ** stay in sync.
@@ -973,14 +976,282 @@ static const command_rec dav_calendar_cmds[] =
     { NULL }
 };
 
+static int dav_calendar_post_config(apr_pool_t *p, apr_pool_t *plog,
+                                    apr_pool_t *ptemp, server_rec *s)
+{
+    /* Register CalDAV methods */
+    iM_MKCALENDAR = ap_method_register(p, "MKCALENDAR");
+
+    return OK;
+}
+
+/*
+ * dav_log_err()
+ *
+ * Write error information to the log.
+ */
+static void dav_log_err(request_rec *r, dav_error *err, int level)
+{
+    dav_error *errscan;
+
+    /* Log the errors */
+    /* ### should have a directive to log the first or all */
+    for (errscan = err; errscan != NULL; errscan = errscan->prev) {
+        if (errscan->desc == NULL)
+            continue;
+
+        /* Intentional no APLOGNO */
+        ap_log_rerror(APLOG_MARK, level, errscan->aprerr, r, "%s  [%d, #%d]",
+                      errscan->desc, errscan->status, errscan->error_id);
+    }
+}
+
+static void dav_prop_log_errors(dav_prop_ctx *ctx)
+{
+    dav_log_err(ctx->r, ctx->err, APLOG_ERR);
+}
+
+/*
+ * Call <func> for each context. This can stop when an error occurs, or
+ * simply iterate through the whole list.
+ *
+ * Returns 1 if an error occurs (and the iteration is aborted). Returns 0
+ * if all elements are processed.
+ *
+ * If <reverse> is true (non-zero), then the list is traversed in
+ * reverse order.
+ */
+static int dav_process_ctx_list(void (*func)(dav_prop_ctx *ctx),
+                                apr_array_header_t *ctx_list, int stop_on_error,
+                                int reverse)
+{
+    int i = ctx_list->nelts;
+    dav_prop_ctx *ctx = (dav_prop_ctx *)ctx_list->elts;
+
+    if (reverse)
+        ctx += i;
+
+    while (i--) {
+        if (reverse)
+            --ctx;
+
+        (*func)(ctx);
+        if (stop_on_error && DAV_PROP_CTX_HAS_ERR(*ctx)) {
+            return 1;
+        }
+
+        if (!reverse)
+            ++ctx;
+    }
+
+    return 0;
+}
+
+static int dav_calendar_handle_mkcalendar(request_rec *r)
+{
+
+	dav_error *err;
+	const dav_provider *provider;
+    dav_resource *resource = NULL;
+    apr_xml_doc *doc;
+    apr_xml_elem *child;
+    dav_response *multi_status;
+    dav_propdb *propdb;
+    dav_response resp = { 0 };
+    apr_text *propstat_text;
+    apr_array_header_t *ctx_list;
+    dav_prop_ctx *ctx;
+    dav_auto_version_info av_info;
+    int resource_state;
+    int result;
+    int failure = 0;
+
+
+	/* find the dav provider */
+	provider = dav_get_provider(r);
+    if (provider == NULL) {
+    	dav_handle_err(r, dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
+                             apr_psprintf(r->pool,
+                             "DAV not enabled for %s",
+                             ap_escape_html(r->pool, resource->uri))), NULL);
+    }
+
+    /* resolve calendar resource */
+    if ((err = provider->repos->get_resource(r, NULL, NULL, 0, &resource))) {
+        return dav_handle_err(r, err, NULL);
+    }
+
+	/* already exists and is a collection? we're done */
+	if (resource->exists) {
+        err = dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, APR_SUCCESS,
+        		"Collection already exists");
+        err->tagname = "resource-must-be-null";
+        return dav_handle_err(r, err, NULL);
+	}
+
+    /* sanity check parents */
+    if ((err = dav_calendar_check_calender(r, resource, provider, NULL))) {
+        return dav_handle_err(r, err, NULL);
+    }
+
+    resource_state = dav_get_resource_state(r, resource);
+
+    if ((err = dav_validate_request(r, resource, 0, NULL, &multi_status,
+    		resource_state == DAV_RESOURCE_NULL ?
+    				DAV_VALIDATE_PARENT : DAV_VALIDATE_RESOURCE,
+					NULL))) {
+        return dav_handle_err(r, err, multi_status);
+    }
+
+    /* if versioned resource, make sure parent is checked out */
+    if ((err = dav_auto_checkout(r, resource, 1 /* parent_only */,
+                                 &av_info)) != NULL) {
+        return dav_handle_err(r, err, NULL);
+    }
+
+    /* create calendar */
+    if ((err = dav_calendar_make_calendar(r, resource)) != NULL) {
+        dav_auto_checkin(r, NULL, err != NULL /* undo if error */,
+        		0 /*unlock*/, &av_info);
+        return dav_handle_err(r, err, NULL);
+    }
+
+    if ((result = ap_xml_parse_input(r, &doc)) != OK) {
+        return result;
+    }
+
+    /* note: doc == NULL if no request body */
+    if (doc == NULL) {
+        dav_auto_checkin(r, NULL, err != NULL /* undo if error */,
+        		0 /*unlock*/, &av_info);
+
+        return OK;
+    }
+
+    if (!dav_validate_root(doc, "mkcalendar")) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+                      "The request body does not contain "
+                      "a \"mkcalendar\" element.");
+        return HTTP_BAD_REQUEST;
+    }
+
+    if ((err = dav_open_propdb(r, NULL, resource, 0, doc->namespaces,
+                               &propdb)) != NULL) {
+        /* undo any auto-checkout */
+        dav_auto_checkin(r, resource, 1 /*undo*/, 0 /*unlock*/, &av_info);
+
+        err = dav_push_error(r->pool, HTTP_INTERNAL_SERVER_ERROR, 0,
+                             apr_psprintf(r->pool,
+                                          "Could not open the property "
+                                          "database for %s.",
+                                          ap_escape_html(r->pool, r->uri)),
+                             err);
+        return dav_handle_err(r, err, NULL);
+    }
+
+    /* ### what to do about closing the propdb on server failure? */
+
+    /* ### validate "live" properties */
+
+    /* set up an array to hold property operation contexts */
+    ctx_list = apr_array_make(r->pool, 10, sizeof(dav_prop_ctx));
+
+    /* do a first pass to ensure that all "remove" properties exist */
+    for (child = doc->root->first_child; child; child = child->next) {
+        int is_remove;
+        apr_xml_elem *prop_group;
+        apr_xml_elem *one_prop;
+
+        /* Ignore children that are not set/remove */
+        if (child->ns != APR_XML_NS_DAV_ID
+            || (!(is_remove = (strcmp(child->name, "remove") == 0))
+                && strcmp(child->name, "set") != 0)) {
+            continue;
+        }
+
+        /* make sure that a "prop" child exists for set/remove */
+        if ((prop_group = dav_find_child(child, "prop")) == NULL) {
+            dav_close_propdb(propdb);
+
+            /* undo any auto-checkout */
+            dav_auto_checkin(r, resource, 1 /*undo*/, 0 /*unlock*/, &av_info);
+
+            /* This supplies additional information for the default message. */
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(00588)
+                          "A \"prop\" element is missing inside "
+                          "the propertyupdate command.");
+            return HTTP_BAD_REQUEST;
+        }
+
+        for (one_prop = prop_group->first_child; one_prop;
+             one_prop = one_prop->next) {
+
+            ctx = (dav_prop_ctx *)apr_array_push(ctx_list);
+            ctx->propdb = propdb;
+            ctx->operation = is_remove ? DAV_PROP_OP_DELETE : DAV_PROP_OP_SET;
+            ctx->prop = one_prop;
+
+            ctx->r = r;         /* for later use by dav_prop_log_errors() */
+
+            dav_prop_validate(ctx);
+
+            if ( DAV_PROP_CTX_HAS_ERR(*ctx) ) {
+                failure = 1;
+            }
+        }
+    }
+
+    /* ### should test that we found at least one set/remove */
+
+    /* execute all of the operations */
+    if (!failure && dav_process_ctx_list(dav_prop_exec, ctx_list, 1, 0)) {
+        failure = 1;
+    }
+
+    /* generate a failure/success response */
+    if (failure) {
+        (void)dav_process_ctx_list(dav_prop_rollback, ctx_list, 0, 1);
+        propstat_text = dav_failed_proppatch(r->pool, ctx_list);
+    }
+    else {
+        (void)dav_process_ctx_list(dav_prop_commit, ctx_list, 0, 0);
+        propstat_text = dav_success_proppatch(r->pool, ctx_list);
+    }
+
+    /* make sure this gets closed! */
+    dav_close_propdb(propdb);
+
+    /* complete any auto-versioning */
+    dav_auto_checkin(r, resource, failure, 0 /*unlock*/, &av_info);
+
+    /* log any errors that occurred */
+    (void)dav_process_ctx_list(dav_prop_log_errors, ctx_list, 0, 0);
+
+    resp.href = resource->uri;
+
+    /* ### should probably use something new to pass along this text... */
+    resp.propresult.propstats = propstat_text;
+
+    dav_send_multistatus(r, HTTP_MULTI_STATUS, &resp, doc->namespaces);
+
+    return DONE;
+}
+
 static int dav_calendar_handler(request_rec *r)
 {
 
 	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
-    return DECLINED;
+    if (!conf || !conf->dav_calendar) {
+        return DECLINED;
+    }
 
+    if (r->method_number == iM_MKCALENDAR) {
+    	return dav_calendar_handle_mkcalendar(r);
+    }
+
+    return DECLINED;
 }
 
 static int dav_calendar_fixups(request_rec *r)
@@ -997,14 +1268,16 @@ static int dav_calendar_fixups(request_rec *r)
 
 static void register_hooks(apr_pool_t *p)
 {
-    ap_hook_fixups(dav_calendar_fixups, NULL, NULL, APR_HOOK_MIDDLE);
-    ap_hook_handler(dav_calendar_handler, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_post_config(dav_calendar_post_config, NULL, NULL, APR_HOOK_MIDDLE);
 
     dav_register_liveprop_group(p, &dav_calendar_liveprop_group);
     dav_hook_find_liveprop(dav_calendar_find_liveprop, NULL, NULL, APR_HOOK_MIDDLE);
 
     dav_options_provider_register(p, "dav_calendar", &options);
     dav_resource_type_provider_register(p, "dav_calendar", &resource_types);
+
+    ap_hook_fixups(dav_calendar_fixups, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_handler(dav_calendar_handler, NULL, NULL, APR_HOOK_MIDDLE);
 
     dav_hook_deliver_report(dav_calendar_deliver_report, NULL, NULL, APR_HOOK_MIDDLE);
     dav_hook_gather_reports(dav_calendar_gather_reports,
