@@ -1038,7 +1038,7 @@ static const command_rec dav_calendar_cmds[] =
         set_dav_calendar, NULL, RSRC_CONF | ACCESS_CONF,
         "When enabled, the URL space will support calendars."),
 	AP_INIT_TAKE1("DavCalendarTimezone", set_dav_calendar_timezone, NULL, RSRC_CONF | ACCESS_CONF,
-        "Set the default timezone for auto provisioned calendars."),
+        "Set the default timezone for auto provisioned calendars. Defaults to UTC."),
     AP_INIT_TAKE1("DavCalendarHome", add_dav_calendar_home, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for the calendar home. "
     	"Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
