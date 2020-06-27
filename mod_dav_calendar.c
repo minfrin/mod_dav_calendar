@@ -62,9 +62,9 @@ static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
 #define DAV_CALENDAR_XML_NAMESPACE "urn:ietf:params:xml:ns:caldav"
 
 #define DEFAULT_TIMEZONE "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" \
-	"PRODID:-//Graham Leggett//" \
+    "PRODID:-//Graham Leggett//" \
     PACKAGE_STRING \
-	"//EN\r\nBEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
+    "//EN\r\nBEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
 
 /* MKCALENDAR method */
 static int iM_MKCALENDAR;
@@ -87,7 +87,7 @@ enum {
     DAV_CALENDAR_PROPID_calendar_description = 1,
     DAV_CALENDAR_PROPID_calendar_home_set,
 /*
-	DAV_CALENDAR_PROPID_calendar_timezone,
+    DAV_CALENDAR_PROPID_calendar_timezone,
 */
     DAV_CALENDAR_PROPID_getctag,
     DAV_CALENDAR_PROPID_max_attendees_per_instance,
@@ -96,7 +96,7 @@ enum {
     DAV_CALENDAR_PROPID_max_resource_size,
     DAV_CALENDAR_PROPID_min_date_time,
 /*
-	DAV_CALENDAR_PROPID_supported_calendar_component_set,
+    DAV_CALENDAR_PROPID_supported_calendar_component_set,
 */
     DAV_CALENDAR_PROPID_supported_calendar_data,
     DAV_CALENDAR_PROPID_supported_collation_set
@@ -108,77 +108,77 @@ static const dav_liveprop_spec dav_calendar_props[] =
     {
         DAV_CALENDAR_URI_DAV,
         "calendar-description",
-		DAV_CALENDAR_PROPID_calendar_description,
+        DAV_CALENDAR_PROPID_calendar_description,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "calendar-home-set",
-		DAV_CALENDAR_PROPID_calendar_home_set,
+        DAV_CALENDAR_PROPID_calendar_home_set,
         0
     },
 /*
-	{
+    {
         DAV_CALENDAR_URI_DAV,
         "calendar-timezone",
-		DAV_CALENDAR_PROPID_calendar_timezone,
+        DAV_CALENDAR_PROPID_calendar_timezone,
         0
     },
 */
     {
         DAV_CALENDAR_URI_DAV,
         "getctag",
-		DAV_CALENDAR_PROPID_getctag,
+        DAV_CALENDAR_PROPID_getctag,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "max-attendees-per-instance",
-		DAV_CALENDAR_PROPID_max_attendees_per_instance,
+        DAV_CALENDAR_PROPID_max_attendees_per_instance,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "max-date-time",
-		DAV_CALENDAR_PROPID_max_date_time,
+        DAV_CALENDAR_PROPID_max_date_time,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "max-instances",
-		DAV_CALENDAR_PROPID_max_instances,
+        DAV_CALENDAR_PROPID_max_instances,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "max-resource-size",
-		DAV_CALENDAR_PROPID_max_resource_size,
+        DAV_CALENDAR_PROPID_max_resource_size,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "min-date-time",
-		DAV_CALENDAR_PROPID_min_date_time,
+        DAV_CALENDAR_PROPID_min_date_time,
         0
     },
 /*
-	{
+    {
         DAV_CALENDAR_URI_DAV,
         "supported-calendar-component-set",
-		DAV_CALENDAR_PROPID_supported_calendar_component_set,
+        DAV_CALENDAR_PROPID_supported_calendar_component_set,
         0
     },
 */
     {
         DAV_CALENDAR_URI_DAV,
         "supported-calendar-data",
-		DAV_CALENDAR_PROPID_supported_calendar_data,
+        DAV_CALENDAR_PROPID_supported_calendar_data,
         0
     },
     {
         DAV_CALENDAR_URI_DAV,
         "supported-collation-set",
-		DAV_CALENDAR_PROPID_supported_collation_set,
+        DAV_CALENDAR_PROPID_supported_collation_set,
         0
     },
 
@@ -188,16 +188,16 @@ static const dav_liveprop_spec dav_calendar_props[] =
 static const dav_liveprop_group dav_calendar_liveprop_group =
 {
     dav_calendar_props,
-	dav_calendar_namespace_uris,
+    dav_calendar_namespace_uris,
     &dav_hooks_liveprop_calendar
 };
 
 static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
-		int propid, dav_prop_insert what, apr_text_header *phdr)
+        int propid, dav_prop_insert what, apr_text_header *phdr)
 {
     request_rec *r = resource->hooks->get_request_rec(resource);
 
-	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
     apr_pool_t *p = resource->pool;
@@ -206,7 +206,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
     switch (propid) {
     case DAV_CALENDAR_PROPID_calendar_home_set:
-    	/* property allowed, handled below */
+        /* property allowed, handled below */
 
         break;
     default:
@@ -223,7 +223,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
     if (what == DAV_PROP_INSERT_VALUE) {
 
-    	apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
+        apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
                 global_ns, info->name));
 
         switch (propid) {
@@ -234,15 +234,15 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             for (i = 0; i < conf->dav_calendar_homes->nelts; ++i) {
                 const char *err = NULL, *url;
 
-            	url = ap_expr_str_exec(r, homes[i], &err);
+                url = ap_expr_str_exec(r, homes[i], &err);
                 if (err) {
                     ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
                                     "Failure while evaluating the calendar-home-set URL expression for '%s', "
                                     "calendar home value ignored: %s", r->uri, err);
                 }
                 else {
-                	apr_text_append(p, phdr,
-    						apr_psprintf(p, "<D:href>%s</D:href>", url));
+                    apr_text_append(p, phdr,
+                            apr_psprintf(p, "<D:href>%s</D:href>", url));
                 }
 
             }
@@ -250,7 +250,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             break;
         }
         default:
-        	break;
+            break;
         }
 
         apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
@@ -327,7 +327,7 @@ static int dav_calendar_find_liveprop(const dav_resource *resource,
 }
 
 static dav_error *dav_calendar_options_header(request_rec *r,
-		const dav_resource *resource, apr_text_header *phdr)
+        const dav_resource *resource, apr_text_header *phdr)
 {
     apr_text_append(r->pool, phdr, "calendar-access");
 
@@ -335,7 +335,7 @@ static dav_error *dav_calendar_options_header(request_rec *r,
 }
 
 static dav_error *dav_calendar_options_method(request_rec *r,
-		const dav_resource *resource, apr_text_header *phdr)
+        const dav_resource *resource, apr_text_header *phdr)
 {
     apr_text_append(r->pool, phdr, "MKCALENDAR");
     apr_text_append(r->pool, phdr, "REPORT");
@@ -355,115 +355,115 @@ static int dav_calendar_get_resource_type(const dav_resource *resource,
 {
     request_rec *r = resource->hooks->get_request_rec(resource);
 
-	const dav_provider *provider;
-	dav_error *err;
+    const dav_provider *provider;
+    dav_error *err;
     dav_lockdb *lockdb;
     dav_propdb *propdb;
     int result = DECLINED;
 
     *type = *uri = NULL;
 
-	/* find the dav provider */
-	provider = dav_get_provider(r);
+    /* find the dav provider */
+    provider = dav_get_provider(r);
     if (provider == NULL) {
-    	return dav_handle_err(r, dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
-        		apr_psprintf(r->pool,
-        				"DAV not enabled for %s",
-						ap_escape_html(r->pool, r->uri))), NULL);
+        return dav_handle_err(r, dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
+                apr_psprintf(r->pool,
+                        "DAV not enabled for %s",
+                        ap_escape_html(r->pool, r->uri))), NULL);
     }
 
     /* open lock database, to report on supported lock properties */
     /* ### should open read-only */
     if ((err = dav_open_lockdb(r, 0, &lockdb)) != NULL) {
-    	return dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-        		"The lock database could not be opened, "
-        		"cannot retrieve the resource type.",
-				err), NULL);
+        return dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                "The lock database could not be opened, "
+                "cannot retrieve the resource type.",
+                err), NULL);
     }
 
     /* open the property database (readonly) for the resource */
     if ((err = dav_open_propdb(r, lockdb, resource, 1, NULL,
                                &propdb)) != NULL) {
-	    if (lockdb != NULL) {
-	    	dav_close_lockdb(lockdb);
-	    }
+        if (lockdb != NULL) {
+            dav_close_lockdb(lockdb);
+        }
 
-	    return dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-        		"The property database could not be opened, "
-        		"cannot retrieve the resource type.",
-				err), NULL);
+        return dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                "The property database could not be opened, "
+                "cannot retrieve the resource type.",
+                err), NULL);
     }
 
     if (propdb) {
         dav_db *db = NULL;
-    	const dav_prop_name prop = { "DAV:", "resourcetype" };
-    	dav_prop_name name[1] = { { NULL, NULL } };
+        const dav_prop_name prop = { "DAV:", "resourcetype" };
+        dav_prop_name name[1] = { { NULL, NULL } };
 
-    	if ((err = provider->propdb->open(resource->pool, resource, 1, &db)) != NULL) {
-    		result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-	        		"Property database could not be opened, "
-	        		"cannot retrieve the resource type.",
-					err), NULL);
+        if ((err = provider->propdb->open(resource->pool, resource, 1, &db)) != NULL) {
+            result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                    "Property database could not be opened, "
+                    "cannot retrieve the resource type.",
+                    err), NULL);
         }
 
-    	if (db) {
-    		if ((err = provider->propdb->first_name(db, name)) != NULL) {
-    			result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-    	        		"Property could not be retrieved, "
-    	        		"cannot retrieve the resource type.",
-    					err), NULL);
-    		}
-    		else {
+        if (db) {
+            if ((err = provider->propdb->first_name(db, name)) != NULL) {
+                result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                        "Property could not be retrieved, "
+                        "cannot retrieve the resource type.",
+                        err), NULL);
+            }
+            else {
 
-    			while (name->ns != NULL) {
-    				apr_text_header hdr[1] = { { 0 } };
-    				int f;
+                while (name->ns != NULL) {
+                    apr_text_header hdr[1] = { { 0 } };
+                    int f;
 
-    				if (name->name && prop.name && strcmp(name->name, prop.name) == 0
-    						&& ((name->ns && prop.ns && strcmp(name->ns, prop.ns) == 0)
-    								|| (!name->ns && !prop.ns))) {
+                    if (name->name && prop.name && strcmp(name->name, prop.name) == 0
+                            && ((name->ns && prop.ns && strcmp(name->ns, prop.ns) == 0)
+                                    || (!name->ns && !prop.ns))) {
 
-    					if ((err = provider->propdb->output_value(db, name, NULL, hdr, &f)) != NULL) {
+                        if ((err = provider->propdb->output_value(db, name, NULL, hdr, &f)) != NULL) {
 
-    						result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-    								"Property value could not be retrieved, "
-    								"cannot retrieve the resource type.",
-									err), NULL);
+                            result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                                    "Property value could not be retrieved, "
+                                    "cannot retrieve the resource type.",
+                                    err), NULL);
 
-    						break;
-    					}
+                            break;
+                        }
 
-    					if (strstr(hdr->first->text, ">calendar<")) {
+                        if (strstr(hdr->first->text, ">calendar<")) {
 
-    						*type = "calendar";
-    						*uri = DAV_CALENDAR_XML_NAMESPACE;
+                            *type = "calendar";
+                            *uri = DAV_CALENDAR_XML_NAMESPACE;
 
-    						result = OK;
+                            result = OK;
 
-    					}
+                        }
 
-    					break;
-    				}
-    				if ((err = provider->propdb->next_name(db, name)) != NULL) {
+                        break;
+                    }
+                    if ((err = provider->propdb->next_name(db, name)) != NULL) {
 
-    					result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
-    	    	        		"Property could not be retrieved, "
-    	    	        		"cannot retrieve the resource type.",
-    	    					err), NULL);
+                        result = dav_handle_err(r, dav_push_error(r->pool, err->status, 0,
+                                "Property could not be retrieved, "
+                                "cannot retrieve the resource type.",
+                                err), NULL);
 
-    					break;
-    				}
+                        break;
+                    }
 
-    			}
-    			provider->propdb->close(db);
-    		}
-    	}
+                }
+                provider->propdb->close(db);
+            }
+        }
 
         dav_close_propdb(propdb);
     }
 
     if (lockdb != NULL) {
-    	dav_close_lockdb(lockdb);
+        dav_close_lockdb(lockdb);
     }
 
     return result;
@@ -520,10 +520,10 @@ static int dav_calendar_deliver_report(request_rec *r,
             return dav_calendar_query_report(resource, doc, output, err);
         }
         else if (strcmp(doc->root->name, "calendar-multiget") == 0) {
-        	return dav_calendar_multiget_report(resource, doc, output, err);
+            return dav_calendar_multiget_report(resource, doc, output, err);
         }
         else if (strcmp(doc->root->name, "free-busy-query") == 0) {
-        	return dav_calendar_free_busy_query_report(resource, doc, output, err);
+            return dav_calendar_free_busy_query_report(resource, doc, output, err);
         }
         else {
             /* NOTE: if you add a report, don't forget to add it to the
@@ -535,42 +535,42 @@ static int dav_calendar_deliver_report(request_rec *r,
         }
     }
 
-	return DECLINED;
+    return DECLINED;
 }
 
 void dav_calendar_gather_reports(request_rec *r, const dav_resource *resource,
     apr_array_header_t *reports, dav_error **err)
 {
-	dav_report_elem *report;
+    dav_report_elem *report;
 
-	report = apr_array_push(reports);
-	report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
-	report->name = "calendar-query";
+    report = apr_array_push(reports);
+    report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
+    report->name = "calendar-query";
 
-	report = apr_array_push(reports);
-	report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
-	report->name = "calendar-multiget";
+    report = apr_array_push(reports);
+    report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
+    report->name = "calendar-multiget";
 
-	report = apr_array_push(reports);
-	report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
-	report->name = "free-busy-query";
+    report = apr_array_push(reports);
+    report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
+    report->name = "free-busy-query";
 }
 
 static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *resource,
-		const dav_provider *provider, apr_array_header_t *mkcols)
+        const dav_provider *provider, apr_array_header_t *mkcols)
 {
-	dav_error *err;
-	dav_resource *parent;
+    dav_error *err;
+    dav_resource *parent;
 
-	/* a calendar resource must not already exist */
-	if (resource->exists) {
+    /* a calendar resource must not already exist */
+    if (resource->exists) {
         return dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
                              apr_psprintf(r->pool,
                              "Calendar collection already exists: %s",
                              ap_escape_html(r->pool, resource->uri)));
-	}
+    }
 
-	/* walk backwards through the parents, until NULL. Parents must
+    /* walk backwards through the parents, until NULL. Parents must
      * either exist and be collections, or not exist. If the parent is a
      * non-collection, or is a calendar collection, we fail.
      *
@@ -581,124 +581,124 @@ static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *reso
         return err;
     }
 
-	while ((parent)) {
+    while ((parent)) {
 
-		if (!parent->collection) {
-			return dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
-	                           apr_psprintf(r->pool,
-	                                        "The parent resource of %s "
-	                                        "is not a collection.",
-	                                        ap_escape_html(r->pool, r->uri)));
-		}
+        if (!parent->collection) {
+            return dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
+                               apr_psprintf(r->pool,
+                                            "The parent resource of %s "
+                                            "is not a collection.",
+                                            ap_escape_html(r->pool, r->uri)));
+        }
 
-		if (mkcols && !parent->exists) {
-			dav_resource **mkcol = apr_array_push(mkcols);
-			*mkcol = parent;
-		}
+        if (mkcols && !parent->exists) {
+            dav_resource **mkcol = apr_array_push(mkcols);
+            *mkcol = parent;
+        }
 
-		if (parent->exists) {
-		    dav_lockdb *lockdb;
-		    dav_propdb *propdb;
+        if (parent->exists) {
+            dav_lockdb *lockdb;
+            dav_propdb *propdb;
 
-		    /* open lock database, to report on supported lock properties */
-		    /* ### should open read-only */
-		    if ((err = dav_open_lockdb(r, 0, &lockdb)) != NULL) {
-		        return dav_push_error(r->pool, err->status, 0,
-		                              "The lock database could not be opened, "
-		                              "preventing the checking of a parent "
-		                              "calendar collection.",
-		                              err);
-		    }
-
-		    /* open the property database (readonly) for the resource */
-		    if ((err = dav_open_propdb(r, lockdb, resource, 1, NULL,
-		                               &propdb)) != NULL) {
-			    if (lockdb != NULL) {
-			    	dav_close_lockdb(lockdb);
-			    }
-
-		        return dav_push_error(r->pool, err->status, 0,
-		                              "The property database could not be opened, "
+            /* open lock database, to report on supported lock properties */
+            /* ### should open read-only */
+            if ((err = dav_open_lockdb(r, 0, &lockdb)) != NULL) {
+                return dav_push_error(r->pool, err->status, 0,
+                                      "The lock database could not be opened, "
                                       "preventing the checking of a parent "
                                       "calendar collection.",
-		                              err);
-		    }
+                                      err);
+            }
 
-		    if (propdb) {
-		        dav_db *db = NULL;
-		    	const dav_prop_name prop = { "DAV:", "resourcetype" };
-		    	dav_prop_name name[1] = { { NULL, NULL } };
+            /* open the property database (readonly) for the resource */
+            if ((err = dav_open_propdb(r, lockdb, resource, 1, NULL,
+                                       &propdb)) != NULL) {
+                if (lockdb != NULL) {
+                    dav_close_lockdb(lockdb);
+                }
 
-		    	if ((err = provider->propdb->open(resource->pool, parent, 1, &db)) != NULL) {
-		            return err;
-		        }
+                return dav_push_error(r->pool, err->status, 0,
+                                      "The property database could not be opened, "
+                                      "preventing the checking of a parent "
+                                      "calendar collection.",
+                                      err);
+            }
 
-		    	if (db) {
-		    		if ((err = provider->propdb->first_name(db, name)) != NULL) {
-		    			return err;
-		    		}
+            if (propdb) {
+                dav_db *db = NULL;
+                const dav_prop_name prop = { "DAV:", "resourcetype" };
+                dav_prop_name name[1] = { { NULL, NULL } };
 
-		    		while (name->ns != NULL) {
-		    			apr_text_header hdr[1] = { { 0 } };
-		    			int f;
+                if ((err = provider->propdb->open(resource->pool, parent, 1, &db)) != NULL) {
+                    return err;
+                }
 
-		    			if (name->name && prop.name && strcmp(name->name, prop.name) == 0
-		    					&& ((name->ns && prop.ns && strcmp(name->ns, prop.ns) == 0)
-		    							|| (!name->ns && !prop.ns))) {
-		    				if ((err = provider->propdb->output_value(db, name, NULL, hdr, &f)) != NULL) {
-		    					return err;
-		    				}
+                if (db) {
+                    if ((err = provider->propdb->first_name(db, name)) != NULL) {
+                        return err;
+                    }
 
-	    					if (strstr(hdr->first->text, ">calendar<")) {
+                    while (name->ns != NULL) {
+                        apr_text_header hdr[1] = { { 0 } };
+                        int f;
 
-		    					err = dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
-		    							apr_psprintf(r->pool,
-		    									"A calendar collection cannot be created "
-		    									"under another calendar collection: %s",
-												ap_escape_html(r->pool, r->uri)));
+                        if (name->name && prop.name && strcmp(name->name, prop.name) == 0
+                                && ((name->ns && prop.ns && strcmp(name->ns, prop.ns) == 0)
+                                        || (!name->ns && !prop.ns))) {
+                            if ((err = provider->propdb->output_value(db, name, NULL, hdr, &f)) != NULL) {
+                                return err;
+                            }
 
-		    				}
+                            if (strstr(hdr->first->text, ">calendar<")) {
 
-		    				break;
-		    			}
-		    			if ((err = provider->propdb->next_name(db, name)) != NULL) {
-		    				break;
-		    			}
+                                err = dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
+                                        apr_psprintf(r->pool,
+                                                "A calendar collection cannot be created "
+                                                "under another calendar collection: %s",
+                                                ap_escape_html(r->pool, r->uri)));
 
-		    		}
-			    	provider->propdb->close(db);
-		    	}
+                            }
 
-		    }
+                            break;
+                        }
+                        if ((err = provider->propdb->next_name(db, name)) != NULL) {
+                            break;
+                        }
 
-		    dav_close_propdb(propdb);
+                    }
+                    provider->propdb->close(db);
+                }
 
-		    if (lockdb != NULL) {
-		    	dav_close_lockdb(lockdb);
-		    }
+            }
 
-		}
+            dav_close_propdb(propdb);
 
-	    if ((err = parent->hooks->get_parent_resource(parent, &parent)) != NULL) {
-	        return err;
-	    }
-	}
+            if (lockdb != NULL) {
+                dav_close_lockdb(lockdb);
+            }
 
-	return NULL;
+        }
+
+        if ((err = parent->hooks->get_parent_resource(parent, &parent)) != NULL) {
+            return err;
+        }
+    }
+
+    return NULL;
 }
 
 static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resource)
 {
-	dav_error *err;
-	const dav_provider *provider;
+    dav_error *err;
+    const dav_provider *provider;
     dav_lockdb *lockdb;
     dav_propdb *propdb;
 
-	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
-	/* find the dav provider */
-	provider = dav_get_provider(r);
+    /* find the dav provider */
+    provider = dav_get_provider(r);
     if (provider == NULL) {
         return dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
                              apr_psprintf(r->pool,
@@ -707,15 +707,15 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     }
 
     /* resource->collection = 1; */
-	if ((err = resource->hooks->create_collection(resource))) {
-		return dav_push_error(r->pool, err->status, 0,
-				apr_psprintf(r->pool,
-						"Could not create calendar collection: %s",
-						ap_escape_html(r->pool, resource->uri)),
-						err);
-	}
+    if ((err = resource->hooks->create_collection(resource))) {
+        return dav_push_error(r->pool, err->status, 0,
+                apr_psprintf(r->pool,
+                        "Could not create calendar collection: %s",
+                        ap_escape_html(r->pool, resource->uri)),
+                        err);
+    }
 
-	/* set the resource type to calendar */
+    /* set the resource type to calendar */
 
     /* open lock database, to report on supported lock properties */
     /* ### should open read-only */
@@ -730,9 +730,9 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     /* open the property database (readonly) for the resource */
     if ((err = dav_open_propdb(r, lockdb, resource, 1, NULL,
                                &propdb)) != NULL) {
-	    if (lockdb != NULL) {
-	    	dav_close_lockdb(lockdb);
-	    }
+        if (lockdb != NULL) {
+            dav_close_lockdb(lockdb);
+        }
 
         return dav_push_error(r->pool, err->status, 0,
                               "The property database could not be opened, "
@@ -744,83 +744,83 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     if (propdb) {
         dav_db *db = NULL;
 
-    	if ((err = provider->propdb->open(resource->pool, resource, 0, &db)) != NULL) {
-	        err = dav_push_error(r->pool, err->status, 0,
-	                              "Property database could not be opened, "
-	                              "preventing the creation of a "
-	                              "calendar collection.",
-	                              err);
-    	}
-    	else {
+        if ((err = provider->propdb->open(resource->pool, resource, 0, &db)) != NULL) {
+            err = dav_push_error(r->pool, err->status, 0,
+                                  "Property database could not be opened, "
+                                  "preventing the creation of a "
+                                  "calendar collection.",
+                                  err);
+        }
+        else {
 
-    	    apr_array_header_t *ns;
-    	    apr_xml_elem elem[2] = { { 0 } };
-    	    apr_text text[2] = { { 0 } };
+            apr_array_header_t *ns;
+            apr_xml_elem elem[2] = { { 0 } };
+            apr_text text[2] = { { 0 } };
             dav_prop_name restype[2] = { { DAV_XML_NAMESPACE, "resourcetype" },
-            		{ DAV_CALENDAR_XML_NAMESPACE, "calendar-timezone" } };
+                    { DAV_CALENDAR_XML_NAMESPACE, "calendar-timezone" } };
             dav_namespace_map *map = NULL;
 
-    	    ns = apr_array_make(resource->pool, 3, sizeof(const char *));
+            ns = apr_array_make(resource->pool, 3, sizeof(const char *));
 
-    	    *(const char **)apr_array_push(ns) = DAV_XML_NAMESPACE;
-    	    *(const char **)apr_array_push(ns) = DAV_CALENDAR_XML_NAMESPACE;
+            *(const char **)apr_array_push(ns) = DAV_XML_NAMESPACE;
+            *(const char **)apr_array_push(ns) = DAV_CALENDAR_XML_NAMESPACE;
 
-    	    elem[0].name = restype[0].name;
-    	    elem[0].ns = 1;
-    	    elem[0].first_cdata.first = &text[0];
-    	    text[0].text = "calendar";
+            elem[0].name = restype[0].name;
+            elem[0].ns = 1;
+            elem[0].first_cdata.first = &text[0];
+            text[0].text = "calendar";
 
-    	    elem[1].name = restype[1].name;
-    	    elem[1].ns = 1;
-    	    elem[1].first_cdata.first = &text[1];
-    	    text[1].text = conf->dav_calendar_timezone;
+            elem[1].name = restype[1].name;
+            elem[1].ns = 1;
+            elem[1].first_cdata.first = &text[1];
+            text[1].text = conf->dav_calendar_timezone;
 
-    	    if ((err = provider->propdb->map_namespaces(db, ns, &map)) != NULL) {
-    	        err = dav_push_error(r->pool, err->status, 0,
-    	                              "Namespace could not be mapped, "
-    	                              "preventing the creation of a "
-    	                              "calendar collection.",
-    	                              err);
+            if ((err = provider->propdb->map_namespaces(db, ns, &map)) != NULL) {
+                err = dav_push_error(r->pool, err->status, 0,
+                                      "Namespace could not be mapped, "
+                                      "preventing the creation of a "
+                                      "calendar collection.",
+                                      err);
             }
-    	    else if ((err =  provider->propdb->store(db, &restype[0], &elem[0], map)) != NULL) {
-    	        err = dav_push_error(r->pool, err->status, 0,
-    	                              "Property 'calendar' could not be stored, "
-    	                              "preventing the creation of a "
-    	                              "calendar collection.",
-    	                              err);
+            else if ((err =  provider->propdb->store(db, &restype[0], &elem[0], map)) != NULL) {
+                err = dav_push_error(r->pool, err->status, 0,
+                                      "Property 'calendar' could not be stored, "
+                                      "preventing the creation of a "
+                                      "calendar collection.",
+                                      err);
             }
-    	    else if ((err =  provider->propdb->store(db, &restype[1], &elem[1], map)) != NULL) {
-    	        err = dav_push_error(r->pool, err->status, 0,
-    	                              "Property 'calendar-timezone' could not be stored, "
-    	                              "preventing the creation of a "
-    	                              "calendar collection.",
-    	                              err);
+            else if ((err =  provider->propdb->store(db, &restype[1], &elem[1], map)) != NULL) {
+                err = dav_push_error(r->pool, err->status, 0,
+                                      "Property 'calendar-timezone' could not be stored, "
+                                      "preventing the creation of a "
+                                      "calendar collection.",
+                                      err);
             }
 
-    	    provider->propdb->close(db);
+            provider->propdb->close(db);
 
-    	}
+        }
 
         dav_close_propdb(propdb);
     }
 
     if (lockdb != NULL) {
-    	dav_close_lockdb(lockdb);
+        dav_close_lockdb(lockdb);
     }
 
-	return err;
+    return err;
 }
 
 static dav_error *dav_calendar_provision_calendar(request_rec *r)
 {
-	dav_error *err;
-	const dav_provider *provider;
+    dav_error *err;
+    const dav_provider *provider;
     dav_resource *resource = NULL;
     apr_array_header_t *mkcols;
     int i;
 
-	/* find the dav provider */
-	provider = dav_get_provider(r);
+    /* find the dav provider */
+    provider = dav_get_provider(r);
     if (provider == NULL) {
         return dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
                              apr_psprintf(r->pool,
@@ -830,17 +830,17 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
 
     /* resolve calendar resource */
     if ((err = provider->repos->get_resource(r, NULL, NULL, 0, &resource))) {
-    	return dav_push_error(r->pool, err->status, 0,
+        return dav_push_error(r->pool, err->status, 0,
                               apr_psprintf(r->pool,
-                                	       "Could not get calendar provision URL: %s",
+                                           "Could not get calendar provision URL: %s",
                                            ap_escape_html(r->pool, resource->uri)),
                               err);
     }
 
-	/* already exists and is a collection? we're done */
-	if (resource->exists && resource->collection) {
-	    return NULL;
-	}
+    /* already exists and is a collection? we're done */
+    if (resource->exists && resource->collection) {
+        return NULL;
+    }
 
     /* sanity check parents */
     mkcols = apr_array_make(r->pool, 2, sizeof(dav_resource *));
@@ -850,16 +850,16 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
 
     /* create parent collections */
     for (i = mkcols->nelts - 1; i >= 0; i--) {
-    	dav_resource *parent = APR_ARRAY_IDX(mkcols, i, dav_resource *);
+        dav_resource *parent = APR_ARRAY_IDX(mkcols, i, dav_resource *);
 
-    	if ((err = parent->hooks->create_collection(parent))) {
-        	return dav_push_error(r->pool, err->status, 0,
+        if ((err = parent->hooks->create_collection(parent))) {
+            return dav_push_error(r->pool, err->status, 0,
                                   apr_psprintf(r->pool,
                                   "Could not create calendar provision "
                                   "parent directory: %s",
-								  ap_escape_html(r->pool, parent->uri)),
+                                  ap_escape_html(r->pool, parent->uri)),
                                   err);
-    	}
+        }
     }
 
     /* create calendar */
@@ -873,24 +873,24 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
 static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
         dav_error **err)
 {
-	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
     ap_expr_info_t **provs = (ap_expr_info_t **)conf->dav_calendar_provisions->elts;
     int i;
 
     if (!conf->dav_calendar_provisions->nelts) {
-    	return DECLINED;
+        return DECLINED;
     }
 
     for (i = 0; i < conf->dav_calendar_provisions->nelts; ++i) {
         const char *error = NULL, *path;
 
-    	path = ap_expr_str_exec(r, provs[i], &error);
+        path = ap_expr_str_exec(r, provs[i], &error);
         if (error) {
-        	*err = dav_new_error(r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
-        			apr_psprintf(r->pool, "Could not evaluate calendar provision URL: %s",
-        					error));
+            *err = dav_new_error(r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
+                    apr_psprintf(r->pool, "Could not evaluate calendar provision URL: %s",
+                            error));
             return DONE;
         }
         else {
@@ -899,12 +899,12 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
             lookup = dav_lookup_uri(path, r, 0 /* must_be_absolute */);
 
             if (lookup.rnew == NULL) {
-            	*err = dav_new_error(r->pool, lookup.err.status, 0, APR_SUCCESS,
-            			lookup.err.desc);
+                *err = dav_new_error(r->pool, lookup.err.status, 0, APR_SUCCESS,
+                        lookup.err.desc);
             }
             if (lookup.rnew->status != HTTP_OK) {
-            	*err = dav_new_error(r->pool, lookup.rnew->status, 0, APR_SUCCESS,
-            			apr_psprintf(r->pool, "Could not lookup calendar provision URL: %s", path));
+                *err = dav_new_error(r->pool, lookup.rnew->status, 0, APR_SUCCESS,
+                        apr_psprintf(r->pool, "Could not lookup calendar provision URL: %s", path));
             }
 
             /* make the calendar */
@@ -925,16 +925,16 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
 
     }
 
-	return DONE;
+    return DONE;
 }
 
 static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
 {
-	dav_calendar_config_rec *conf = apr_pcalloc(p, sizeof(dav_calendar_config_rec));
+    dav_calendar_config_rec *conf = apr_pcalloc(p, sizeof(dav_calendar_config_rec));
 
-	conf->dav_calendar_timezone = DEFAULT_TIMEZONE;
+    conf->dav_calendar_timezone = DEFAULT_TIMEZONE;
 
-	conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(const char *));
+    conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(const char *));
     conf->dav_calendar_provisions = apr_array_make(p, 2, sizeof(const char *));
 
     return conf;
@@ -942,16 +942,16 @@ static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
 
 static void *merge_dav_calendar_dir_config(apr_pool_t *p, void *basev, void *addv)
 {
-	dav_calendar_config_rec *new = (dav_calendar_config_rec *) apr_pcalloc(p,
+    dav_calendar_config_rec *new = (dav_calendar_config_rec *) apr_pcalloc(p,
             sizeof(dav_calendar_config_rec));
-	dav_calendar_config_rec *add = (dav_calendar_config_rec *) addv;
-	dav_calendar_config_rec *base = (dav_calendar_config_rec *) basev;
+    dav_calendar_config_rec *add = (dav_calendar_config_rec *) addv;
+    dav_calendar_config_rec *base = (dav_calendar_config_rec *) basev;
 
     new->dav_calendar = (add->dav_calendar_set == 0) ? base->dav_calendar : add->dav_calendar;
     new->dav_calendar_set = add->dav_calendar_set || base->dav_calendar_set;
 
     new->dav_calendar_timezone = (add->dav_calendar_timezone_set == 0) ?
-    		base->dav_calendar_timezone : add->dav_calendar_timezone;
+            base->dav_calendar_timezone : add->dav_calendar_timezone;
     new->dav_calendar_timezone_set = add->dav_calendar_timezone_set || base->dav_calendar_timezone_set;
 
     new->dav_calendar_homes = apr_array_append(p, add->dav_calendar_homes, base->dav_calendar_homes);
@@ -979,7 +979,7 @@ static const char *set_dav_calendar_timezone(cmd_parms *cmd, void *dconf, const 
     calendar = icalcomponent_new(ICAL_VCALENDAR_COMPONENT);
     icalcomponent_add_property(calendar, icalproperty_new_version("2.0"));
     icalcomponent_add_property(calendar,
-    		icalproperty_new_prodid("-//Graham Leggett//" PACKAGE_STRING "//EN"));
+            icalproperty_new_prodid("-//Graham Leggett//" PACKAGE_STRING "//EN"));
 
     timezone = icalcomponent_new(ICAL_VTIMEZONE_COMPONENT);
     icalcomponent_add_property(timezone, icalproperty_new_tzid(tz));
@@ -1037,14 +1037,14 @@ static const command_rec dav_calendar_cmds[] =
     AP_INIT_FLAG("DavCalendar",
         set_dav_calendar, NULL, RSRC_CONF | ACCESS_CONF,
         "When enabled, the URL space will support calendars."),
-	AP_INIT_TAKE1("DavCalendarTimezone", set_dav_calendar_timezone, NULL, RSRC_CONF | ACCESS_CONF,
+    AP_INIT_TAKE1("DavCalendarTimezone", set_dav_calendar_timezone, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the default timezone for auto provisioned calendars. Defaults to UTC."),
     AP_INIT_TAKE1("DavCalendarHome", add_dav_calendar_home, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for the calendar home. "
-    	"Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
+        "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
     AP_INIT_TAKE1("DavCalendarProvision", add_dav_calendar_provision, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for calendar auto provision. "
-    	"Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}/Home\"."),
+        "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}/Home\"."),
     { NULL }
 };
 
@@ -1061,9 +1061,9 @@ static int dav_calendar_validate_root(const apr_xml_doc *doc,
                                       const char *namespace,
                                       const char *tagname)
 {
-	return doc->root &&
-			strcmp(APR_XML_GET_URI_ITEM(doc->namespaces, doc->root->ns), namespace) == 0 &&
-			strcmp(doc->root->name, tagname) == 0;
+    return doc->root &&
+            strcmp(APR_XML_GET_URI_ITEM(doc->namespaces, doc->root->ns), namespace) == 0 &&
+            strcmp(doc->root->name, tagname) == 0;
 }
 
 /*
@@ -1131,8 +1131,8 @@ static int dav_process_ctx_list(void (*func)(dav_prop_ctx *ctx),
 static int dav_calendar_handle_mkcalendar(request_rec *r)
 {
 
-	dav_error *err;
-	const dav_provider *provider;
+    dav_error *err;
+    const dav_provider *provider;
     dav_resource *resource = NULL;
     apr_xml_doc *doc;
     apr_xml_elem *child;
@@ -1147,10 +1147,10 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     int failure = 0;
 
 
-	/* find the dav provider */
-	provider = dav_get_provider(r);
+    /* find the dav provider */
+    provider = dav_get_provider(r);
     if (provider == NULL) {
-    	dav_handle_err(r, dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
+        dav_handle_err(r, dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
                              apr_psprintf(r->pool,
                              "DAV not enabled for %s",
                              ap_escape_html(r->pool, resource->uri))), NULL);
@@ -1161,13 +1161,13 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
         return dav_handle_err(r, err, NULL);
     }
 
-	/* already exists and is a collection? we're done */
-	if (resource->exists) {
+    /* already exists and is a collection? we're done */
+    if (resource->exists) {
         err = dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, APR_SUCCESS,
-        		"Collection already exists");
+                "Collection already exists");
         err->tagname = "resource-must-be-null";
         return dav_handle_err(r, err, NULL);
-	}
+    }
 
     /* sanity check parents */
     if ((err = dav_calendar_check_calender(r, resource, provider, NULL))) {
@@ -1177,9 +1177,9 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     resource_state = dav_get_resource_state(r, resource);
 
     if ((err = dav_validate_request(r, resource, 0, NULL, &multi_status,
-    		resource_state == DAV_RESOURCE_NULL ?
-    				DAV_VALIDATE_PARENT : DAV_VALIDATE_RESOURCE,
-					NULL))) {
+            resource_state == DAV_RESOURCE_NULL ?
+                    DAV_VALIDATE_PARENT : DAV_VALIDATE_RESOURCE,
+                    NULL))) {
         return dav_handle_err(r, err, multi_status);
     }
 
@@ -1192,7 +1192,7 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     /* create calendar */
     if ((err = dav_calendar_make_calendar(r, resource)) != NULL) {
         dav_auto_checkin(r, NULL, err != NULL /* undo if error */,
-        		0 /*unlock*/, &av_info);
+                0 /*unlock*/, &av_info);
         return dav_handle_err(r, err, NULL);
     }
 
@@ -1203,7 +1203,7 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     /* note: doc == NULL if no request body */
     if (doc == NULL) {
         dav_auto_checkin(r, NULL, err != NULL /* undo if error */,
-        		0 /*unlock*/, &av_info);
+                0 /*unlock*/, &av_info);
 
         return OK;
     }
@@ -1310,18 +1310,18 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     if (failure) {
         dav_response resp = { 0 };
 
-    	resp.href = resource->uri;
+        resp.href = resource->uri;
 
-    	/* ### should probably use something new to pass along this text... */
-    	resp.propresult.propstats = propstat_text;
+        /* ### should probably use something new to pass along this text... */
+        resp.propresult.propstats = propstat_text;
 
-    	dav_send_multistatus(r, HTTP_MULTI_STATUS, &resp, doc->namespaces);
+        dav_send_multistatus(r, HTTP_MULTI_STATUS, &resp, doc->namespaces);
 
-    	return DONE;
+        return DONE;
     }
     else {
 
-    	r->status_line = ap_get_status_line(r->status = 201);
+        r->status_line = ap_get_status_line(r->status = 201);
 
         return DONE;
     }
@@ -1330,7 +1330,7 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
 static int dav_calendar_handler(request_rec *r)
 {
 
-	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
     if (!conf || !conf->dav_calendar) {
@@ -1338,7 +1338,7 @@ static int dav_calendar_handler(request_rec *r)
     }
 
     if (r->method_number == iM_MKCALENDAR) {
-    	return dav_calendar_handle_mkcalendar(r);
+        return dav_calendar_handle_mkcalendar(r);
     }
 
     return DECLINED;
@@ -1346,14 +1346,14 @@ static int dav_calendar_handler(request_rec *r)
 
 static int dav_calendar_fixups(request_rec *r)
 {
-	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
-	if (conf->dav_calendar) {
-		AP_REQUEST_SET_BNOTE(r, AP_REQUEST_STRONG_ETAG, AP_REQUEST_STRONG_ETAG);
-	}
+    if (conf->dav_calendar) {
+        AP_REQUEST_SET_BNOTE(r, AP_REQUEST_STRONG_ETAG, AP_REQUEST_STRONG_ETAG);
+    }
 
-	return OK;
+    return OK;
 }
 
 static void register_hooks(apr_pool_t *p)
