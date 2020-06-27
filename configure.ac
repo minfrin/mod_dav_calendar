@@ -52,7 +52,10 @@ fi
 PKG_CHECK_MODULES(apr, apr-1 >= 1.3)
 PKG_CHECK_MODULES(apu, apr-util-1 >= 1.3)
 PKG_CHECK_MODULES(libical, libical >= 0.40)
-LIBS="$LIBS $libical_LIBS $apr_LIBS $apu_LIBS"
+
+CFLAGS="$CFLAGS $apr_CFLAGS $apu_CFLAGS $libical_CFLAGS"
+CPPFLAGS="$CPPFLAGS $apr_CPPFLAGS $apu_CPPFLAGS $libical_CPPFLAGS"
+LDFLAGS="$LDFLAGS $apr_LIBS $apu_LIBS $libical_LIBS"
 
 # Checks for header files.
 AC_CHECK_HEADERS(libical/ical.h)

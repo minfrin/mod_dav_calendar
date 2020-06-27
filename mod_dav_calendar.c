@@ -32,15 +32,26 @@
 #include "http_request.h"
 #include "util_script.h"
 
+#include <libical/ical.h>
+
 #include "mod_dav.h"
+
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+#include "config.h"
 
 module AP_MODULE_DECLARE_DATA dav_calendar_module;
 
 typedef struct
 {
     int dav_calendar_set :1;
+    int dav_calendar_timezone_set :1;
     apr_array_header_t *dav_calendar_homes;
     apr_array_header_t *dav_calendar_provisions;
+    const char *dav_calendar_timezone;
     int dav_calendar;
 } dav_calendar_config_rec;
 
@@ -49,6 +60,11 @@ static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
 
 #define DAV_XML_NAMESPACE "DAV:"
 #define DAV_CALENDAR_XML_NAMESPACE "urn:ietf:params:xml:ns:caldav"
+
+#define DEFAULT_TIMEZONE "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" \
+	"PRODID:-//Graham Leggett//" \
+    PACKAGE_STRING \
+	"//EN\r\nBEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
 
 /* MKCALENDAR method */
 static int iM_MKCALENDAR;
@@ -70,14 +86,18 @@ enum {
 enum {
     DAV_CALENDAR_PROPID_calendar_description = 1,
     DAV_CALENDAR_PROPID_calendar_home_set,
-    DAV_CALENDAR_PROPID_calendar_timezone,
+/*
+	DAV_CALENDAR_PROPID_calendar_timezone,
+*/
     DAV_CALENDAR_PROPID_getctag,
     DAV_CALENDAR_PROPID_max_attendees_per_instance,
     DAV_CALENDAR_PROPID_max_date_time,
     DAV_CALENDAR_PROPID_max_instances,
     DAV_CALENDAR_PROPID_max_resource_size,
     DAV_CALENDAR_PROPID_min_date_time,
-    DAV_CALENDAR_PROPID_supported_calendar_component_set,
+/*
+	DAV_CALENDAR_PROPID_supported_calendar_component_set,
+*/
     DAV_CALENDAR_PROPID_supported_calendar_data,
     DAV_CALENDAR_PROPID_supported_collation_set
 };
@@ -97,12 +117,14 @@ static const dav_liveprop_spec dav_calendar_props[] =
 		DAV_CALENDAR_PROPID_calendar_home_set,
         0
     },
-    {
+/*
+	{
         DAV_CALENDAR_URI_DAV,
         "calendar-timezone",
 		DAV_CALENDAR_PROPID_calendar_timezone,
         0
     },
+*/
     {
         DAV_CALENDAR_URI_DAV,
         "getctag",
@@ -139,12 +161,14 @@ static const dav_liveprop_spec dav_calendar_props[] =
 		DAV_CALENDAR_PROPID_min_date_time,
         0
     },
-    {
+/*
+	{
         DAV_CALENDAR_URI_DAV,
         "supported-calendar-component-set",
 		DAV_CALENDAR_PROPID_supported_calendar_component_set,
         0
     },
+*/
     {
         DAV_CALENDAR_URI_DAV,
         "supported-calendar-data",
@@ -670,6 +694,9 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     dav_lockdb *lockdb;
     dav_propdb *propdb;
 
+	dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+            &dav_calendar_module);
+
 	/* find the dav provider */
 	provider = dav_get_provider(r);
     if (provider == NULL) {
@@ -727,9 +754,10 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     	else {
 
     	    apr_array_header_t *ns;
-    	    apr_xml_elem elem[1] = { { 0 } };
-    	    apr_text text = { 0 };
-            dav_prop_name restype[1] = { { DAV_XML_NAMESPACE, "resourcetype" } };
+    	    apr_xml_elem elem[2] = { { 0 } };
+    	    apr_text text[2] = { { 0 } };
+            dav_prop_name restype[2] = { { DAV_XML_NAMESPACE, "resourcetype" },
+            		{ DAV_CALENDAR_XML_NAMESPACE, "calendar-timezone" } };
             dav_namespace_map *map = NULL;
 
     	    ns = apr_array_make(resource->pool, 3, sizeof(const char *));
@@ -737,10 +765,15 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     	    *(const char **)apr_array_push(ns) = DAV_XML_NAMESPACE;
     	    *(const char **)apr_array_push(ns) = DAV_CALENDAR_XML_NAMESPACE;
 
-    	    elem->name = restype->name;
-    	    elem->ns = 1;
-    	    elem->first_cdata.first = &text;
-    	    text.text = "calendar";
+    	    elem[0].name = restype[0].name;
+    	    elem[0].ns = 1;
+    	    elem[0].first_cdata.first = &text[0];
+    	    text[0].text = "calendar";
+
+    	    elem[1].name = restype[1].name;
+    	    elem[1].ns = 1;
+    	    elem[1].first_cdata.first = &text[1];
+    	    text[1].text = conf->dav_calendar_timezone;
 
     	    if ((err = provider->propdb->map_namespaces(db, ns, &map)) != NULL) {
     	        err = dav_push_error(r->pool, err->status, 0,
@@ -749,9 +782,16 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     	                              "calendar collection.",
     	                              err);
             }
-    	    else if ((err =  provider->propdb->store(db, restype, elem, map)) != NULL) {
+    	    else if ((err =  provider->propdb->store(db, &restype[0], &elem[0], map)) != NULL) {
     	        err = dav_push_error(r->pool, err->status, 0,
-    	                              "Property could not be stored, "
+    	                              "Property 'calendar' could not be stored, "
+    	                              "preventing the creation of a "
+    	                              "calendar collection.",
+    	                              err);
+            }
+    	    else if ((err =  provider->propdb->store(db, &restype[1], &elem[1], map)) != NULL) {
+    	        err = dav_push_error(r->pool, err->status, 0,
+    	                              "Property 'calendar-timezone' could not be stored, "
     	                              "preventing the creation of a "
     	                              "calendar collection.",
     	                              err);
@@ -892,7 +932,9 @@ static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
 {
 	dav_calendar_config_rec *conf = apr_pcalloc(p, sizeof(dav_calendar_config_rec));
 
-    conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(const char *));
+	conf->dav_calendar_timezone = DEFAULT_TIMEZONE;
+
+	conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(const char *));
     conf->dav_calendar_provisions = apr_array_make(p, 2, sizeof(const char *));
 
     return conf;
@@ -908,6 +950,10 @@ static void *merge_dav_calendar_dir_config(apr_pool_t *p, void *basev, void *add
     new->dav_calendar = (add->dav_calendar_set == 0) ? base->dav_calendar : add->dav_calendar;
     new->dav_calendar_set = add->dav_calendar_set || base->dav_calendar_set;
 
+    new->dav_calendar_timezone = (add->dav_calendar_timezone_set == 0) ?
+    		base->dav_calendar_timezone : add->dav_calendar_timezone;
+    new->dav_calendar_timezone_set = add->dav_calendar_timezone_set || base->dav_calendar_timezone_set;
+
     new->dav_calendar_homes = apr_array_append(p, add->dav_calendar_homes, base->dav_calendar_homes);
     new->dav_calendar_provisions = apr_array_append(p, add->dav_calendar_provisions, base->dav_calendar_provisions);
 
@@ -920,6 +966,30 @@ static const char *set_dav_calendar(cmd_parms *cmd, void *dconf, int flag)
 
     conf->dav_calendar = flag;
     conf->dav_calendar_set = 1;
+
+    return NULL;
+}
+
+static const char *set_dav_calendar_timezone(cmd_parms *cmd, void *dconf, const char *tz)
+{
+    dav_calendar_config_rec *conf = dconf;
+
+    icalcomponent *calendar, *timezone;
+
+    calendar = icalcomponent_new(ICAL_VCALENDAR_COMPONENT);
+    icalcomponent_add_property(calendar, icalproperty_new_version("2.0"));
+    icalcomponent_add_property(calendar,
+    		icalproperty_new_prodid("-//Graham Leggett//" PACKAGE_STRING "//EN"));
+
+    timezone = icalcomponent_new(ICAL_VTIMEZONE_COMPONENT);
+    icalcomponent_add_property(timezone, icalproperty_new_tzid(tz));
+
+    icalcomponent_add_component(calendar,timezone);
+
+    conf->dav_calendar_timezone = icalcomponent_as_ical_string(calendar);
+    conf->dav_calendar_timezone_set = 1;
+
+    icalcomponent_free(calendar);
 
     return NULL;
 }
@@ -967,6 +1037,8 @@ static const command_rec dav_calendar_cmds[] =
     AP_INIT_FLAG("DavCalendar",
         set_dav_calendar, NULL, RSRC_CONF | ACCESS_CONF,
         "When enabled, the URL space will support calendars."),
+	AP_INIT_TAKE1("DavCalendarTimezone", set_dav_calendar_timezone, NULL, RSRC_CONF | ACCESS_CONF,
+        "Set the default timezone for auto provisioned calendars."),
     AP_INIT_TAKE1("DavCalendarHome", add_dav_calendar_home, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for the calendar home. "
     	"Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
@@ -983,6 +1055,15 @@ static int dav_calendar_post_config(apr_pool_t *p, apr_pool_t *plog,
     iM_MKCALENDAR = ap_method_register(p, "MKCALENDAR");
 
     return OK;
+}
+
+static int dav_calendar_validate_root(const apr_xml_doc *doc,
+                                      const char *namespace,
+                                      const char *tagname)
+{
+	return doc->root &&
+			strcmp(APR_XML_GET_URI_ITEM(doc->namespaces, doc->root->ns), namespace) == 0 &&
+			strcmp(doc->root->name, tagname) == 0;
 }
 
 /*
@@ -1057,7 +1138,6 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     apr_xml_elem *child;
     dav_response *multi_status;
     dav_propdb *propdb;
-    dav_response resp = { 0 };
     apr_text *propstat_text;
     apr_array_header_t *ctx_list;
     dav_prop_ctx *ctx;
@@ -1128,7 +1208,7 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
         return OK;
     }
 
-    if (!dav_validate_root(doc, "mkcalendar")) {
+    if (!dav_calendar_validate_root(doc, DAV_CALENDAR_XML_NAMESPACE, "mkcalendar")) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
                       "The request body does not contain "
                       "a \"mkcalendar\" element.");
@@ -1227,14 +1307,24 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     /* log any errors that occurred */
     (void)dav_process_ctx_list(dav_prop_log_errors, ctx_list, 0, 0);
 
-    resp.href = resource->uri;
+    if (failure) {
+        dav_response resp = { 0 };
 
-    /* ### should probably use something new to pass along this text... */
-    resp.propresult.propstats = propstat_text;
+    	resp.href = resource->uri;
 
-    dav_send_multistatus(r, HTTP_MULTI_STATUS, &resp, doc->namespaces);
+    	/* ### should probably use something new to pass along this text... */
+    	resp.propresult.propstats = propstat_text;
 
-    return DONE;
+    	dav_send_multistatus(r, HTTP_MULTI_STATUS, &resp, doc->namespaces);
+
+    	return DONE;
+    }
+    else {
+
+    	r->status_line = ap_get_status_line(r->status = 201);
+
+        return DONE;
+    }
 }
 
 static int dav_calendar_handler(request_rec *r)
