@@ -20,6 +20,73 @@
  *
  *  Author: Graham Leggett
  *
+ * Configure directives in the following order:
+ *
+ * - DavAccessPrincipalUrl: Tell the CalDAV client what the principal
+ *   URL of the current user. This URL is an expression.
+ *
+ * - DavCalendarHome: Tell the CalDAV client the name of the calendar
+ *   collection, or the ordinary collection containing calendar
+ *   collections. This is an expression, and as a collection must have
+ *   a trailing slash. A typical expression might be
+ *   /dav/calendars/%{escape:%{REMOTE_USER}}/.
+ *
+ * - DavCalendarProvision: Tell the server what calendar collections
+ *   should be auto provisioned on first access. A typical expression
+ *   might be /dav/calendars/%{escape:%{REMOTE_USER}}/Home/. More than
+ *   one calendar collection can be specified. All parent collections
+ *   will be created automatically.
+ *
+ * Possible configuration:
+ *
+ * <IfModule dav_calendar_module>
+ *   # Calendar backed by mod_dav_fs for storage.
+ *   DavLockDB /tmp/lockdb
+ *
+ *   <Location /dav>
+ *     Dav on
+ *     DavCalendar on
+ *
+ * <IfModule dav_access_module>
+ *     # Allow every resource to expose who the current principal is
+ *     DavAccessPrincipalUrl /dav/principals/%{escape:%{REMOTE_USER}}
+ * </IfModule>
+ *
+ *     # this calendar is visible to anyone, logged in or not
+ *     #  DavCalendarHome /dav/calendars/public
+ *     DavCalendarHome /dav/calendars/%{escape:%{REMOTE_USER}}/
+ *
+ *     AuthBasicProvider file
+ *     AuthUserFile conf/passwd
+ *     AuthType basic
+ *     AuthName calendar
+ *
+ *     Require valid-user
+ *
+ *   </Location>
+ *   <Location /dav/principals>
+ *     # Every principal is told where the calendars are
+ *     # this calendar only exists if the user has logged in
+ *     #  DavCalendarHome /dav/calendars/%{escape:%{REMOTE_USER}}/
+ *   </Location>
+ *   <Location /dav/calendars>
+ *     DavCalendar on
+ *     DavCalendarProvision /dav/calendars/%{escape:%{REMOTE_USER}}/Home/
+ *     DavCalendarTimezone UTC
+ *   </Location>
+ *   <Location /dav/calendars/public>
+ *     Require all granted
+ *   </Location>
+ *
+ *   Alias /dav /www/htdocs/dav
+ *   <Directory /www/htdocs/dav>
+ *
+ *     Options FollowSymLinks
+ *     AllowOverride None
+ *
+ *   </Directory>
+ * </IfModule>
+ *
  */
 #include <apr_lib.h>
 #include <apr_strings.h>
