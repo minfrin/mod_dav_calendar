@@ -1411,6 +1411,29 @@ static int dav_calendar_handler(request_rec *r)
     return DECLINED;
 }
 
+static int dav_calendar_method_precondition(request_rec *r,
+        dav_resource *src, dav_resource *dst,
+        const apr_xml_doc *doc, dav_error **err)
+{
+	/* handle auto provisioning */
+	if (src && !src->exists && src->collection) {
+
+		/*
+		** The hook implementer must ensure behaviour of the hook is both safe and
+		** idempotent as defined by RFC7231 section 4.2. For example, creating a
+		** collection resource on first OPTIONS is safe, as no representation would
+		** have been served prior to this call. Care must be taken to ensure that
+		** clients cannot create arbitrary resources using this hook resulting in
+		** capacity exhaustion. If the hook is not relevant, return DECLINED,
+		** otherwise DONE with any error in err.
+		*/
+
+		return dav_calendar_auto_provision(r, src, err);
+	}
+
+	return DECLINED;
+}
+
 static int dav_calendar_fixups(request_rec *r)
 {
     dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
@@ -1440,8 +1463,8 @@ static void register_hooks(apr_pool_t *p)
     dav_hook_gather_reports(dav_calendar_gather_reports,
                                   NULL, NULL, APR_HOOK_MIDDLE);
 
-    dav_hook_auto_provision(dav_calendar_auto_provision,
-                            NULL, NULL, APR_HOOK_MIDDLE);
+    dav_hook_method_precondition(dav_calendar_method_precondition,
+                                 NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 AP_DECLARE_MODULE(dav_calendar) =
