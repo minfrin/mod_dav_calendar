@@ -830,18 +830,6 @@ static dav_error * dav_calendar_report_walker(dav_walk_resource *wres, int callt
     dav_error *err;
     dav_propdb *propdb;
     dav_get_props_result propstats = { 0 };
-#ifdef APR_XML_X2T_PARSED
-    dav_resource *resource = (dav_resource *)wres->resource;
-
-    /* propfind skipped if no read privilege to a resource
-    ** setting acls from parent resource
-    */
-    resource->acls = ctx->w.root->acls;
-    if (resource->acls &&
-         (err = resource->acls->acl_check_read(ctx->r, resource))) {
-        return NULL;
-    }
-#endif
 
     /*
     ** Note: ctx->doc can only be NULL for DAV_PROPFIND_IS_ALLPROP. Since
@@ -1038,7 +1026,7 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
     ctx.w.root = NULL;
 
     ctx.doc = (apr_xml_doc *)doc;
-    ctx.r = NULL;
+    ctx.r = r;
     ctx.bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
     apr_pool_create(&ctx.scratchpool, r->pool);
     apr_pool_tag(ctx.scratchpool, "mod_dav-scratch");
@@ -1091,7 +1079,6 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
         else if ((err = dav_get_resource(lookup.rnew, 0 /* label_allowed */,
                 0 /* use_checked_in */, &child_resource)) == NULL) {
         	/* success */
-        	ctx.r = lookup.rnew;
         	ctx.w.root = child_resource;
         }
 
