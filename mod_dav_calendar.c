@@ -209,12 +209,12 @@ enum {
 static const dav_liveprop_spec dav_calendar_props[] =
 {
     /* standard calendar properties */
-	{
-		DAV_CALENDAR_URI_DAV,
-		"calendar-data",
-		DAV_CALENDAR_PROPID_calendar_data,
-		0
-	},
+    {
+        DAV_CALENDAR_URI_DAV,
+        "calendar-data",
+        DAV_CALENDAR_PROPID_calendar_data,
+        0
+    },
     {
         DAV_CALENDAR_URI_DAV,
         "calendar-description",
@@ -303,8 +303,8 @@ static const dav_liveprop_group dav_calendar_liveprop_group =
 };
 
 typedef struct dav_calendar_ctx {
-	icalcomponent *comp;
-	dav_error *err;
+    icalcomponent *comp;
+    dav_error *err;
     apr_sha1_ctx_t *sha1;
 } dav_calendar_ctx;
 
@@ -348,72 +348,72 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
 
         /* EOS means we are done. */
         if (APR_BUCKET_IS_EOS(e)) {
-        	break;
+            break;
         }
 
         /* let's count this data */
         if (APR_SUCCESS == (rv = apr_bucket_read(e, &data, &size,
                 APR_BLOCK_READ))) {
 
-        	len += size;
+            len += size;
 
-        	if (len > conf->max_resource_size) {
-        		return APR_ENOSPC;
-        	}
+            if (len > conf->max_resource_size) {
+                return APR_ENOSPC;
+            }
         }
         else {
-        	return rv;
+            return rv;
         }
 
     }
 
     buffer = apr_palloc(f->r->pool, len + 1);
     if ((rv = apr_brigade_flatten(bb, buffer, &len)) != APR_SUCCESS) {
-    	return rv;
+        return rv;
     }
     buffer[len] = 0;
 
     comp = icalparser_parse_string(buffer);
     if(icalerrno != ICAL_NO_ERROR) {
-    	if (comp) {
-    		icalcomponent_free(comp);
-    	}
-		ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
-				icalerror_perror());
-    	return APR_EGENERAL;
+        if (comp) {
+            icalcomponent_free(comp);
+        }
+        ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
+                icalerror_perror());
+        return APR_EGENERAL;
     }
 
     if (!comp) {
-    	return APR_EGENERAL;
+        return APR_EGENERAL;
     }
 
     if (!ctx->comp) {
-    	ctx->comp = comp;
+        ctx->comp = comp;
         apr_pool_cleanup_register(f->r->pool, comp, icalcomponent_cleanup,
-    			apr_pool_cleanup_null);
+                apr_pool_cleanup_null);
     }
     else {
-    	icalcomponent_merge_component(ctx->comp, comp);
+        icalcomponent_merge_component(ctx->comp, comp);
     }
 
     return APR_SUCCESS;
 }
 
 static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
-		dav_calendar_ctx *ctx)
+        dav_calendar_ctx *ctx)
 {
-	ap_filter_rec_t *rec = apr_pcalloc(r->pool, sizeof(ap_filter_rec_t));
-	ap_filter_t *f = apr_pcalloc(r->pool, sizeof(ap_filter_t));
+    ap_filter_rec_t *rec = apr_pcalloc(r->pool, sizeof(ap_filter_rec_t));
+    ap_filter_t *f = apr_pcalloc(r->pool, sizeof(ap_filter_t));
     ap_filter_func ff;
 
-	/* just enough to bootstrap our filter */
+    /* just enough to bootstrap our filter */
     ff.out_func = dav_calendar_parse_icalendar_filter;
-	rec->filter_func = ff;
-	f->frec = rec;
-	f->r = r;
-	f->ctx = ctx;
+    rec->filter_func = ff;
+    f->frec = rec;
+    f->r = r;
+    f->ctx = ctx;
 
-	return f;
+    return f;
 }
 
 static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
@@ -431,9 +431,9 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
     switch (propid) {
     case DAV_CALENDAR_PROPID_calendar_data:
         /* property allowed only in a calendar-multiget */
-    	if (!r || r->method_number != M_REPORT) {
+        if (!r || r->method_number != M_REPORT) {
             return DAV_PROP_INSERT_NOTDEF;
-    	}
+        }
 
         break;
     case DAV_CALENDAR_PROPID_calendar_home_set:
@@ -465,29 +465,29 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
             /* we have to "deliver" the stream into an output filter */
             if (!resource->hooks->handle_get) {
-            	int status;
+                int status;
 
-				request_rec *rr = ap_sub_req_method_uri("GET", resource->uri, r,
-						dav_calendar_create_parse_icalendar_filter(r, &ctx));
+                request_rec *rr = ap_sub_req_method_uri("GET", resource->uri, r,
+                        dav_calendar_create_parse_icalendar_filter(r, &ctx));
 
-				status = ap_run_sub_req(rr);
-				if (status != OK) {
+                status = ap_run_sub_req(rr);
+                if (status != OK) {
 
-	            	err = dav_push_error(r->pool, status, 0,
-	                                     "Unable to read calendar.",
-	                                     ctx.err);
-	                dav_log_err(r, err, APLOG_ERR);
+                    err = dav_push_error(r->pool, status, 0,
+                                         "Unable to read calendar.",
+                                         ctx.err);
+                    dav_log_err(r, err, APLOG_ERR);
 
-	                return DAV_PROP_INSERT_NOTDEF;
-				}
+                    return DAV_PROP_INSERT_NOTDEF;
+                }
 
             }
 
             /* mod_dav delivers the body */
             else if ((err = (*resource->hooks->deliver)(resource,
-            		dav_calendar_create_parse_icalendar_filter(r, &ctx))) != NULL) {
+                    dav_calendar_create_parse_icalendar_filter(r, &ctx))) != NULL) {
 
-            	err = dav_push_error(r->pool, err->status, 0,
+                err = dav_push_error(r->pool, err->status, 0,
                                      "Unable to read calendar.",
                                      ctx.err);
                 dav_log_err(r, err, APLOG_ERR);
@@ -497,7 +497,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
             /* how did the parsing go? */
             if (ctx.err || !ctx.comp) {
-            	err = dav_push_error(r->pool, err->status, 0,
+                err = dav_push_error(r->pool, err->status, 0,
                                      "Unable to parse calendar.",
                                      ctx.err);
                 dav_log_err(r, err, APLOG_ERR);
@@ -508,9 +508,9 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
                     global_ns, info->name));
 
-			apr_text_append(p, phdr,
-					apr_pescape_entity(p,
-							icalcomponent_as_ical_string(ctx.comp), 0));
+            apr_text_append(p, phdr,
+                    apr_pescape_entity(p,
+                            icalcomponent_as_ical_string(ctx.comp), 0));
 
             apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
                     global_ns, info->name));
@@ -550,14 +550,14 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
                     global_ns, info->name));
 
-        	apr_text_append(p, phdr,
+            apr_text_append(p, phdr,
                     apr_psprintf(p, "<D:href>%" APR_OFF_T_FMT "</D:href>",
-                    		conf->max_resource_size));
+                            conf->max_resource_size));
 
             apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
                     global_ns, info->name));
 
-        	break;
+            break;
         }
         default:
             break;
@@ -903,15 +903,15 @@ static dav_error *dav_calendar_query_report(request_rec *r,
     const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output)
 {
-	dav_error *err;
+    dav_error *err;
     int depth;
-	dav_walker_ctx ctx = { { 0 } };
+    dav_walker_ctx ctx = { { 0 } };
     dav_response *multi_status;
 
-	if (1) {
-	    return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
-	            "The requested report is not supported yet");
-	}
+    if (1) {
+        return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
+                "The requested report is not supported yet");
+    }
 
     /* ### validate that only one of these three elements is present */
 
@@ -928,8 +928,8 @@ static dav_error *dav_calendar_query_report(request_rec *r,
     else {
         /* "calendar-multiget" element must have one of the above three children */
         return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
-        		"The \"calendar-query\" element does not contain one of "
-        		"the required child elements (the specific command).");
+                "The \"calendar-query\" element does not contain one of "
+                "the required child elements (the specific command).");
     }
 
     ctx.w.walk_type = DAV_WALKTYPE_NORMAL | DAV_WALKTYPE_AUTH;
@@ -946,11 +946,11 @@ static dav_error *dav_calendar_query_report(request_rec *r,
 
     /* ### should open read-only */
     if ((err = dav_open_lockdb(r, 0, &ctx.w.lockdb)) != NULL) {
-    	return dav_push_error(r->pool, err->status, 0,
+        return dav_push_error(r->pool, err->status, 0,
                              "The lock database could not be opened, "
                              "preventing access to the various lock "
                              "properties for the PROPFIND.",
-							 err);
+                             err);
     }
     if (ctx.w.lockdb != NULL) {
         /* if we have a lock database, then we can walk locknull resources */
@@ -1000,7 +1000,7 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
     const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output)
 {
-	dav_error *err;
+    dav_error *err;
     apr_xml_elem *href_elem;
     dav_resource *child_resource;
     dav_walker_ctx ctx = { { 0 } };
@@ -1021,15 +1021,15 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
     else {
         /* "calendar-multiget" element must have one of the above three children */
         return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
-        		"The \"calendar-multiget\" element does not contain one of "
-        		"the required child elements (the specific command).");
+                "The \"calendar-multiget\" element does not contain one of "
+                "the required child elements (the specific command).");
     }
 
     href_elem = dav_find_child(doc->root, "href");
     if (!href_elem) {
         return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
-        		"The \"calendar-multiget\" element does not contain one or "
-        		"more href elements.");
+                "The \"calendar-multiget\" element does not contain one or "
+                "more href elements.");
     }
 
     ctx.w.walk_type = DAV_WALKTYPE_NORMAL | DAV_WALKTYPE_AUTH;
@@ -1046,7 +1046,7 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
 
     /* ### should open read-only */
     if ((err = dav_open_lockdb(r, 0, &ctx.w.lockdb)) != NULL) {
-    	return dav_push_error(r->pool, err->status, 0,
+        return dav_push_error(r->pool, err->status, 0,
                              "The lock database could not be opened, "
                              "preventing access to the various lock "
                              "properties for the PROPFIND.",
@@ -1080,10 +1080,10 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
            for that source. */
         lookup = dav_lookup_uri(href, r, 0 /* must_be_absolute */);
         if (lookup.rnew == NULL) {
-        	err = &lookup.err;
+            err = &lookup.err;
         }
         else if (lookup.rnew->status != HTTP_OK) {
-        	err = dav_push_error(r->pool, lookup.rnew->status, 0,
+            err = dav_push_error(r->pool, lookup.rnew->status, 0,
                     "Could not access the resource.",
                     NULL);
         }
@@ -1091,8 +1091,8 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
         /* get the resource from each subrequest */
         else if ((err = dav_get_resource(lookup.rnew, 0 /* label_allowed */,
                 0 /* use_checked_in */, &child_resource)) == NULL) {
-        	/* success */
-        	ctx.w.root = child_resource;
+            /* success */
+            ctx.w.root = child_resource;
         }
 
         /* send a response for any errors */
@@ -1115,7 +1115,7 @@ static dav_error *dav_calendar_multiget_report(request_rec *r,
 
         /* Have the provider walk each resource. */
         if ((err = (*resource->hooks->walk)(&ctx.w, 0, &multi_status)) != NULL) {
-        	break;
+            break;
         }
 
         if (lookup.rnew) {
@@ -1179,7 +1179,7 @@ static int dav_calendar_deliver_report(request_rec *r,
     if (doc->root->ns == ns) {
 
         if (strcmp(doc->root->name, "calendar-query") == 0) {
-        	*err = dav_calendar_query_report(r, resource, doc, output);
+            *err = dav_calendar_query_report(r, resource, doc, output);
         }
         else if (strcmp(doc->root->name, "calendar-multiget") == 0) {
             *err = dav_calendar_multiget_report(r, resource, doc, output);
@@ -1196,7 +1196,7 @@ static int dav_calendar_deliver_report(request_rec *r,
             return HTTP_NOT_IMPLEMENTED;
         }
         if (*err) {
-        	return (*err)->status;
+            return (*err)->status;
         }
         return DONE;
     }
@@ -1665,7 +1665,7 @@ static const char *set_dav_calendar_timezone(cmd_parms *cmd, void *dconf, const 
 }
 
 static const char *set_dav_calendar_max_resource_size(cmd_parms *cmd,
-		void *dconf, const char *arg)
+        void *dconf, const char *arg)
 {
     dav_calendar_config_rec *conf = dconf;
 
@@ -1725,8 +1725,8 @@ static const command_rec dav_calendar_cmds[] =
         "When enabled, the URL space will support calendars."),
     AP_INIT_TAKE1("DavCalendarTimezone", set_dav_calendar_timezone, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the default timezone for auto provisioned calendars. Defaults to UTC."),
-	AP_INIT_TAKE1("DavCalendarMaxResourceSize", set_dav_calendar_max_resource_size, NULL, RSRC_CONF | ACCESS_CONF,
-		"Set the maximum resource size of an individual calendar. Defaults to 10MB."),
+    AP_INIT_TAKE1("DavCalendarMaxResourceSize", set_dav_calendar_max_resource_size, NULL, RSRC_CONF | ACCESS_CONF,
+        "Set the maximum resource size of an individual calendar. Defaults to 10MB."),
     AP_INIT_TAKE1("DavCalendarHome", add_dav_calendar_home, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for the calendar home. "
         "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
@@ -1752,18 +1752,18 @@ static dav_error * dav_calendar_etag_walker(dav_walk_resource *wres, int calltyp
 
     /* avoid loops */
     if (calltype != DAV_CALLTYPE_MEMBER) {
-    	return NULL;
+        return NULL;
     }
 
     etag = (*wres->resource->hooks->getetag)(wres->resource);
 
     if (etag) {
-    	if (cctx->sha1) {
+        if (cctx->sha1) {
             apr_sha1_update(cctx->sha1, etag, strlen(etag));
-    	}
+        }
     }
     else {
-    	cctx->sha1 = NULL;
+        cctx->sha1 = NULL;
     }
 
     return NULL;
@@ -1778,39 +1778,39 @@ static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype
 
     /* avoid loops */
     if (calltype != DAV_CALLTYPE_MEMBER) {
-    	return NULL;
+        return NULL;
     }
 
     /* we have to "deliver" the stream into an output filter */
     if (!wres->resource->hooks->handle_get) {
-    	int status;
+        int status;
 
-		request_rec *rr = ap_sub_req_method_uri("GET", wres->resource->uri, r,
-				dav_calendar_create_parse_icalendar_filter(r, cctx));
+        request_rec *rr = ap_sub_req_method_uri("GET", wres->resource->uri, r,
+                dav_calendar_create_parse_icalendar_filter(r, cctx));
 
-		status = ap_run_sub_req(rr);
-		if (status != OK) {
+        status = ap_run_sub_req(rr);
+        if (status != OK) {
 
-			return dav_push_error(r->pool, status, 0,
+            return dav_push_error(r->pool, status, 0,
                                  "Unable to read calendar.",
                                  cctx->err);
-		}
+        }
         ap_destroy_sub_req(rr);
 
     }
 
     /* mod_dav delivers the body */
     else if ((err = (*wres->resource->hooks->deliver)(wres->resource,
-    		dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
+            dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
 
-    	return dav_push_error(r->pool, err->status, 0,
+        return dav_push_error(r->pool, err->status, 0,
                              "Unable to read calendar.",
                              cctx->err);
     }
 
     /* how did the parsing go? */
     if (cctx->err || !cctx->comp) {
-    	return dav_push_error(r->pool, err->status, 0,
+        return dav_push_error(r->pool, err->status, 0,
                              "Unable to parse calendar.",
                              cctx->err);
     }
@@ -1826,7 +1826,7 @@ static int dav_calendar_handle_get(request_rec *r)
     apr_bucket_brigade *bb;
     apr_bucket *e;
     dav_calendar_ctx cctx = { 0 };
-	dav_walk_params w = { 0 };
+    dav_walk_params w = { 0 };
     dav_response *multi_status;
     const char *type, *ns, *ical;
     apr_sha1_ctx_t sha1 = { { 0 } };
@@ -1839,9 +1839,9 @@ static int dav_calendar_handle_get(request_rec *r)
     provider = dav_get_provider(r);
     if (provider == NULL) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
-        		 "DAV not enabled for %s, ignoring GET request",
-				 ap_escape_html(r->pool, r->uri));
-    	return DECLINED;
+                 "DAV not enabled for %s, ignoring GET request",
+                 ap_escape_html(r->pool, r->uri));
+        return DECLINED;
     }
 
     /* resolve calendar resource */
@@ -1851,27 +1851,27 @@ static int dav_calendar_handle_get(request_rec *r)
 
     /* not existing or not a collection? not for us */
     if (!resource->exists || !resource->collection) {
-    	return DECLINED;
+        return DECLINED;
     }
 
     status = dav_calendar_get_resource_type(resource,  &type, &ns);
     switch (status) {
     case OK:
-    	if (!type || !ns || strcmp(type, "calendar") ||
-    			strcmp(ns, DAV_CALENDAR_XML_NAMESPACE)) {
+        if (!type || !ns || strcmp(type, "calendar") ||
+                strcmp(ns, DAV_CALENDAR_XML_NAMESPACE)) {
             /* Not for us */
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
-            		"Collection %s not a calendar collection, ignoring GET request",
-					ap_escape_html(r->pool, r->uri));
+                    "Collection %s not a calendar collection, ignoring GET request",
+                    ap_escape_html(r->pool, r->uri));
             return DECLINED;
-    	}
-    	break;
+        }
+        break;
     case DECLINED:
         /* Not for us */
         return DECLINED;
 
     default:
-    	return status;
+        return status;
     }
 
     w.walk_type = DAV_WALKTYPE_NORMAL | DAV_WALKTYPE_AUTH;
@@ -1881,16 +1881,16 @@ static int dav_calendar_handle_get(request_rec *r)
 
     /* ### should open read-only */
     if ((err = dav_open_lockdb(r, 0, &w.lockdb)) != NULL) {
-    	err = dav_push_error(r->pool, err->status, 0,
+        err = dav_push_error(r->pool, err->status, 0,
                              "The lock database could not be opened, "
                              "preventing access to the various lock "
                              "properties for the calendar GET.",
-							 err);
+                             err);
         return dav_handle_err(r, err, NULL);
     }
     if (w.lockdb != NULL) {
         /* if we have a lock database, then we can walk locknull resources */
-    	w.walk_type |= DAV_WALKTYPE_LOCKNULL;
+        w.walk_type |= DAV_WALKTYPE_LOCKNULL;
     }
 
     /* Have the provider walk the etags. */
@@ -1903,13 +1903,13 @@ static int dav_calendar_handle_get(request_rec *r)
     /* Have the provider walk the resource. */
     if (!err) {
 
-    	if (cctx.sha1) {
-    		apr_table_set(r->headers_out, "ETag", apr_pstrcat(r->pool, "\"",
-    				apr_pencode_base64_binary(r->pool, digest, APR_SHA1_DIGESTSIZE,
-    						APR_ENCODE_NOPADDING, NULL), "\"", NULL));
-    	}
+        if (cctx.sha1) {
+            apr_table_set(r->headers_out, "ETag", apr_pstrcat(r->pool, "\"",
+                    apr_pencode_base64_binary(r->pool, digest, APR_SHA1_DIGESTSIZE,
+                            APR_ENCODE_NOPADDING, NULL), "\"", NULL));
+        }
 
-    	/* handle conditional requests */
+        /* handle conditional requests */
         status = ap_meets_conditions(r);
         if (status) {
             return status;
@@ -1918,11 +1918,11 @@ static int dav_calendar_handle_get(request_rec *r)
         cctx.comp = icalcomponent_new(ICAL_VCALENDAR_COMPONENT);
 
         apr_pool_cleanup_register(r->pool, cctx.comp, icalcomponent_cleanup,
-    			apr_pool_cleanup_null);
+                apr_pool_cleanup_null);
 
-    	w.func = dav_calendar_get_walker;
+        w.func = dav_calendar_get_walker;
 
-    	err = (*resource->hooks->walk)(&w, depth, &multi_status);
+        err = (*resource->hooks->walk)(&w, depth, &multi_status);
     }
 
     if (w.lockdb != NULL) {
@@ -1933,15 +1933,15 @@ static int dav_calendar_handle_get(request_rec *r)
         return dav_handle_err(r, err, NULL);
     }
 
-	ical = icalcomponent_as_ical_string(cctx.comp);
-	ical_len = strlen(ical);
+    ical = icalcomponent_as_ical_string(cctx.comp);
+    ical_len = strlen(ical);
 
     bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 
     ap_set_content_length(r, ical_len);
 
     e = apr_bucket_pool_create(ical, ical_len, r->pool,
-    		r->connection->bucket_alloc);
+            r->connection->bucket_alloc);
     APR_BRIGADE_INSERT_TAIL(bb, e);
 
     e = apr_bucket_eos_create(r->connection->bucket_alloc);
@@ -2224,23 +2224,23 @@ static int dav_calendar_method_precondition(request_rec *r,
         dav_resource *src, dav_resource *dst,
         const apr_xml_doc *doc, dav_error **err)
 {
-	/* handle auto provisioning */
-	if (src && !src->exists && src->collection) {
+    /* handle auto provisioning */
+    if (src && !src->exists && src->collection) {
 
-		/*
-		** The hook implementer must ensure behaviour of the hook is both safe and
-		** idempotent as defined by RFC7231 section 4.2. For example, creating a
-		** collection resource on first OPTIONS is safe, as no representation would
-		** have been served prior to this call. Care must be taken to ensure that
-		** clients cannot create arbitrary resources using this hook resulting in
-		** capacity exhaustion. If the hook is not relevant, return DECLINED,
-		** otherwise DONE with any error in err.
-		*/
+        /*
+        ** The hook implementer must ensure behaviour of the hook is both safe and
+        ** idempotent as defined by RFC7231 section 4.2. For example, creating a
+        ** collection resource on first OPTIONS is safe, as no representation would
+        ** have been served prior to this call. Care must be taken to ensure that
+        ** clients cannot create arbitrary resources using this hook resulting in
+        ** capacity exhaustion. If the hook is not relevant, return DECLINED,
+        ** otherwise DONE with any error in err.
+        */
 
-		return dav_calendar_auto_provision(r, src, err);
-	}
+        return dav_calendar_auto_provision(r, src, err);
+    }
 
-	return DECLINED;
+    return DECLINED;
 }
 
 static int dav_calendar_fixups(request_rec *r)
