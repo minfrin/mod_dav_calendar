@@ -330,6 +330,11 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     apr_size_t len = 0;
     apr_status_t rv = APR_SUCCESS;
 
+    /* sanity check - match our content type? */
+    if (!f->r->content_type || strcmp(f->r->content_type, "text/calendar")) {
+        return APR_EGENERAL;
+    }
+
     /*
      * Alas the libical library does not have a way to parse a buffer
      * of fixed length, only a NUL terminated string. To avoid us having
@@ -926,7 +931,7 @@ static dav_error *dav_calendar_query_report(request_rec *r,
         ctx.propfind_type = DAV_PROPFIND_IS_PROP;
     }
     else {
-        /* "calendar-multiget" element must have one of the above three children */
+        /* "calendar-query" element must have one of the above three children */
         return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
                 "The \"calendar-query\" element does not contain one of "
                 "the required child elements (the specific command).");
