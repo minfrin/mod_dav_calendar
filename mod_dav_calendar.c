@@ -1939,6 +1939,7 @@ static int dav_calendar_handle_get(request_rec *r)
     bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 
     ap_set_content_length(r, ical_len);
+    ap_set_content_type(r, "text/calendar");
 
     e = apr_bucket_pool_create(ical, ical_len, r->pool,
             r->connection->bucket_alloc);
