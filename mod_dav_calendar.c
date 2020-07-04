@@ -91,6 +91,9 @@
 #include <apr_lib.h>
 #include <apr_escape.h>
 #include <apr_strings.h>
+#include "apr_sha1.h"
+#include "apr_encode.h"
+#include "apr_tables.h"
 
 #include "httpd.h"
 #include "http_config.h"
@@ -302,6 +305,7 @@ static const dav_liveprop_group dav_calendar_liveprop_group =
 typedef struct dav_calendar_ctx {
 	icalcomponent *comp;
 	dav_error *err;
+    apr_sha1_ctx_t *sha1;
 } dav_calendar_ctx;
 
 static apr_status_t icalcomponent_cleanup(void *data)
@@ -318,6 +322,8 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
             &dav_calendar_module);
 
     dav_calendar_ctx *ctx = f->ctx;
+
+    icalcomponent *comp;
 
     apr_bucket *e;
     char *buffer;
@@ -367,20 +373,27 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     }
     buffer[len] = 0;
 
-    ctx->comp = icalparser_parse_string(buffer);
-    if (ctx->comp) {
-    	apr_pool_cleanup_register(f->r->pool, ctx->comp, icalcomponent_cleanup,
-    			apr_pool_cleanup_null);
-    }
-
+    comp = icalparser_parse_string(buffer);
     if(icalerrno != ICAL_NO_ERROR) {
+    	if (comp) {
+    		icalcomponent_free(comp);
+    	}
 		ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
 				icalerror_perror());
     	return APR_EGENERAL;
     }
 
-    if (!ctx->comp) {
+    if (!comp) {
     	return APR_EGENERAL;
+    }
+
+    if (!ctx->comp) {
+    	ctx->comp = comp;
+        apr_pool_cleanup_register(f->r->pool, comp, icalcomponent_cleanup,
+    			apr_pool_cleanup_null);
+    }
+    else {
+    	icalcomponent_merge_component(ctx->comp, comp);
     }
 
     return APR_SUCCESS;
@@ -1732,6 +1745,225 @@ static int dav_calendar_post_config(apr_pool_t *p, apr_pool_t *plog,
     return OK;
 }
 
+static dav_error * dav_calendar_etag_walker(dav_walk_resource *wres, int calltype)
+{
+    dav_calendar_ctx *cctx = wres->walk_ctx;
+    const char *etag;
+
+    /* avoid loops */
+    if (calltype != DAV_CALLTYPE_MEMBER) {
+    	return NULL;
+    }
+
+    etag = (*wres->resource->hooks->getetag)(wres->resource);
+
+    if (etag) {
+    	if (cctx->sha1) {
+            apr_sha1_update(cctx->sha1, etag, strlen(etag));
+    	}
+    }
+    else {
+    	cctx->sha1 = NULL;
+    }
+
+    return NULL;
+}
+
+static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype)
+{
+    request_rec *r = wres->resource->hooks->get_request_rec(wres->resource);
+
+    dav_calendar_ctx *cctx = wres->walk_ctx;
+    dav_error *err;
+
+    /* avoid loops */
+    if (calltype != DAV_CALLTYPE_MEMBER) {
+    	return NULL;
+    }
+
+    /* we have to "deliver" the stream into an output filter */
+    if (!wres->resource->hooks->handle_get) {
+    	int status;
+
+		request_rec *rr = ap_sub_req_method_uri("GET", wres->resource->uri, r,
+				dav_calendar_create_parse_icalendar_filter(r, cctx));
+
+		status = ap_run_sub_req(rr);
+		if (status != OK) {
+
+			return dav_push_error(r->pool, status, 0,
+                                 "Unable to read calendar.",
+                                 cctx->err);
+		}
+        ap_destroy_sub_req(rr);
+
+    }
+
+    /* mod_dav delivers the body */
+    else if ((err = (*wres->resource->hooks->deliver)(wres->resource,
+    		dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
+
+    	return dav_push_error(r->pool, err->status, 0,
+                             "Unable to read calendar.",
+                             cctx->err);
+    }
+
+    /* how did the parsing go? */
+    if (cctx->err || !cctx->comp) {
+    	return dav_push_error(r->pool, err->status, 0,
+                             "Unable to parse calendar.",
+                             cctx->err);
+    }
+
+    return NULL;
+}
+
+static int dav_calendar_handle_get(request_rec *r)
+{
+    dav_error *err;
+    const dav_provider *provider;
+    dav_resource *resource = NULL;
+    apr_bucket_brigade *bb;
+    apr_bucket *e;
+    dav_calendar_ctx cctx = { 0 };
+	dav_walk_params w = { 0 };
+    dav_response *multi_status;
+    const char *type, *ns, *ical;
+    apr_sha1_ctx_t sha1 = { { 0 } };
+    unsigned char digest[APR_SHA1_DIGESTSIZE];
+    apr_size_t ical_len;
+    int depth = 1;
+    int status;
+
+    /* find the dav provider */
+    provider = dav_get_provider(r);
+    if (provider == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
+        		 "DAV not enabled for %s, ignoring GET request",
+				 ap_escape_html(r->pool, r->uri));
+    	return DECLINED;
+    }
+
+    /* resolve calendar resource */
+    if ((err = provider->repos->get_resource(r, NULL, NULL, 0, &resource))) {
+        return dav_handle_err(r, err, NULL);
+    }
+
+    /* not existing or not a collection? not for us */
+    if (!resource->exists || !resource->collection) {
+    	return DECLINED;
+    }
+
+    status = dav_calendar_get_resource_type(resource,  &type, &ns);
+    switch (status) {
+    case OK:
+    	if (!type || !ns || strcmp(type, "calendar") ||
+    			strcmp(ns, DAV_CALENDAR_XML_NAMESPACE)) {
+            /* Not for us */
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
+            		"Collection %s not a calendar collection, ignoring GET request",
+					ap_escape_html(r->pool, r->uri));
+            return DECLINED;
+    	}
+    	break;
+    case DECLINED:
+        /* Not for us */
+        return DECLINED;
+
+    default:
+    	return status;
+    }
+
+    w.walk_type = DAV_WALKTYPE_NORMAL | DAV_WALKTYPE_AUTH;
+    w.walk_ctx = &cctx;
+    w.pool = r->pool;
+    w.root = resource;
+
+    /* ### should open read-only */
+    if ((err = dav_open_lockdb(r, 0, &w.lockdb)) != NULL) {
+    	err = dav_push_error(r->pool, err->status, 0,
+                             "The lock database could not be opened, "
+                             "preventing access to the various lock "
+                             "properties for the calendar GET.",
+							 err);
+        return dav_handle_err(r, err, NULL);
+    }
+    if (w.lockdb != NULL) {
+        /* if we have a lock database, then we can walk locknull resources */
+    	w.walk_type |= DAV_WALKTYPE_LOCKNULL;
+    }
+
+    /* Have the provider walk the etags. */
+    w.func = dav_calendar_etag_walker;
+    cctx.sha1 = &sha1;
+    apr_sha1_init(&sha1);
+    err = (*resource->hooks->walk)(&w, depth, &multi_status);
+    apr_sha1_final(digest, &sha1);
+
+    /* Have the provider walk the resource. */
+    if (!err) {
+
+    	if (cctx.sha1) {
+    		apr_table_set(r->headers_out, "ETag", apr_pstrcat(r->pool, "\"",
+    				apr_pencode_base64_binary(r->pool, digest, APR_SHA1_DIGESTSIZE,
+    						APR_ENCODE_NOPADDING, NULL), "\"", NULL));
+    	}
+
+    	/* handle conditional requests */
+        status = ap_meets_conditions(r);
+        if (status) {
+            return status;
+        }
+
+        cctx.comp = icalcomponent_new(ICAL_VCALENDAR_COMPONENT);
+
+        apr_pool_cleanup_register(r->pool, cctx.comp, icalcomponent_cleanup,
+    			apr_pool_cleanup_null);
+
+    	w.func = dav_calendar_get_walker;
+
+    	err = (*resource->hooks->walk)(&w, depth, &multi_status);
+    }
+
+    if (w.lockdb != NULL) {
+        (*w.lockdb->hooks->close_lockdb)(w.lockdb);
+    }
+
+    if (err != NULL) {
+        return dav_handle_err(r, err, NULL);
+    }
+
+	ical = icalcomponent_as_ical_string(cctx.comp);
+	ical_len = strlen(ical);
+
+    bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
+
+    ap_set_content_length(r, ical_len);
+
+    e = apr_bucket_pool_create(ical, ical_len, r->pool,
+    		r->connection->bucket_alloc);
+    APR_BRIGADE_INSERT_TAIL(bb, e);
+
+    e = apr_bucket_eos_create(r->connection->bucket_alloc);
+    APR_BRIGADE_INSERT_TAIL(bb, e);
+
+    status = ap_pass_brigade(r->output_filters, bb);
+    apr_brigade_cleanup(bb);
+
+    if (status == APR_SUCCESS
+        || r->status != HTTP_OK
+        || r->connection->aborted) {
+        return OK;
+    }
+    else {
+        /* no way to know what type of error occurred */
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, status, r,
+                      "dav_calendar_handler: ap_pass_brigade returned %i",
+                      status);
+        return AP_FILTER_ERROR;
+    }
+}
+
 /*
  * Call <func> for each context. This can stop when an error occurs, or
  * simply iterate through the whole list.
@@ -1975,6 +2207,10 @@ static int dav_calendar_handler(request_rec *r)
 
     if (!conf || !conf->dav_calendar) {
         return DECLINED;
+    }
+
+    if (r->method_number == M_GET) {
+        return dav_calendar_handle_get(r);
     }
 
     if (r->method_number == iM_MKCALENDAR) {
