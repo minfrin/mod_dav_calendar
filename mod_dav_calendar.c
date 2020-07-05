@@ -306,6 +306,7 @@ typedef struct dav_calendar_ctx {
     icalcomponent *comp;
     dav_error *err;
     apr_sha1_ctx_t *sha1;
+    request_rec *r;
 } dav_calendar_ctx;
 
 static apr_status_t icalcomponent_cleanup(void *data)
@@ -462,6 +463,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
         case DAV_CALENDAR_PROPID_calendar_data: {
             dav_error *err;
             dav_calendar_ctx ctx = { 0 };
+            ctx.r = r;
 
             /* we have to "deliver" the stream into an output filter */
             if (!resource->hooks->handle_get) {
@@ -1783,6 +1785,13 @@ static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype
 
     err = cctx->err = NULL;
 
+    /* check for any method preconditions */
+    if (dav_run_method_precondition(cctx->r, NULL, wres->resource, NULL, &err) != DECLINED
+            && err) {
+        dav_log_err(r, err, APLOG_DEBUG);
+        return NULL;
+    }
+
     /* we have to "deliver" the stream into an output filter */
     if (!wres->resource->hooks->handle_get) {
         int status;
@@ -1887,6 +1896,7 @@ static int dav_calendar_handle_get(request_rec *r)
     w.walk_ctx = &cctx;
     w.pool = r->pool;
     w.root = resource;
+    cctx.r = r;
 
     /* ### should open read-only */
     if ((err = dav_open_lockdb(r, 0, &w.lockdb)) != NULL) {
@@ -2231,7 +2241,7 @@ static int dav_calendar_handler(request_rec *r)
 }
 
 static int dav_calendar_method_precondition(request_rec *r,
-        dav_resource *src, dav_resource *dst,
+        dav_resource *src, const dav_resource *dst,
         const apr_xml_doc *doc, dav_error **err)
 {
     /* handle auto provisioning */
