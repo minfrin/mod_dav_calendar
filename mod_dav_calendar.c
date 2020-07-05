@@ -330,11 +330,6 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     apr_size_t len = 0;
     apr_status_t rv = APR_SUCCESS;
 
-    /* sanity check - match our content type? */
-    if (!f->r->content_type || strcmp(f->r->content_type, "text/calendar")) {
-        return APR_EGENERAL;
-    }
-
     /*
      * Alas the libical library does not have a way to parse a buffer
      * of fixed length, only a NUL terminated string. To avoid us having
@@ -1786,6 +1781,8 @@ static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype
         return NULL;
     }
 
+    err = cctx->err = NULL;
+
     /* we have to "deliver" the stream into an output filter */
     if (!wres->resource->hooks->handle_get) {
         int status;
@@ -1796,9 +1793,10 @@ static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype
         status = ap_run_sub_req(rr);
         if (status != OK) {
 
-            return dav_push_error(r->pool, status, 0,
-                                 "Unable to read calendar.",
-                                 cctx->err);
+            err = dav_push_error(rr->pool, status, 0,
+                    "Unable to read calendar.",
+                    cctx->err);
+
         }
         ap_destroy_sub_req(rr);
 
@@ -1808,16 +1806,22 @@ static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype
     else if ((err = (*wres->resource->hooks->deliver)(wres->resource,
             dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
 
-        return dav_push_error(r->pool, err->status, 0,
-                             "Unable to read calendar.",
-                             cctx->err);
+        err = dav_push_error(r->pool, 0, 0,
+                "Unable to read calendar.", err);
+
     }
 
     /* how did the parsing go? */
-    if (cctx->err || !cctx->comp) {
-        return dav_push_error(r->pool, err->status, 0,
-                             "Unable to parse calendar.",
-                             cctx->err);
+    if (!cctx->comp) {
+
+        err = dav_push_error(r->pool, 0, 0,
+                "Unable to parse calendar.",
+                cctx->err);
+
+    }
+
+    if (err) {
+        dav_log_err(r, err, APLOG_DEBUG);
     }
 
     return NULL;
