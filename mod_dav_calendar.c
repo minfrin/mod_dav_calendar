@@ -842,9 +842,16 @@ static void dav_calendar_cache_badprops(dav_walker_ctx *ctx)
 static dav_error * dav_calendar_report_walker(dav_walk_resource *wres, int calltype)
 {
     dav_walker_ctx *ctx = wres->walk_ctx;
-    dav_error *err;
+    dav_error *err = NULL;
     dav_propdb *propdb;
     dav_get_props_result propstats = { 0 };
+
+    /* check for any method preconditions */
+    if (dav_run_method_precondition(ctx->r, NULL, wres->resource, ctx->doc, &err) != DECLINED
+            && err) {
+        dav_log_err(ctx->r, err, APLOG_DEBUG);
+        return NULL;
+    }
 
     /*
     ** Note: ctx->doc can only be NULL for DAV_PROPFIND_IS_ALLPROP. Since
