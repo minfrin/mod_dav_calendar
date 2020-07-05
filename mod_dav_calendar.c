@@ -1486,7 +1486,7 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     return err;
 }
 
-static dav_error *dav_calendar_provision_calendar(request_rec *r)
+static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *trigger)
 {
     dav_error *err;
     const dav_provider *provider;
@@ -1527,7 +1527,14 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
     for (i = mkcols->nelts - 1; i >= 0; i--) {
         dav_resource *parent = APR_ARRAY_IDX(mkcols, i, dav_resource *);
 
-        if ((err = parent->hooks->create_collection(parent))) {
+        if (trigger->hooks->is_same_resource(trigger, parent)) {
+        	err = trigger->hooks->create_collection(trigger);
+        }
+        else {
+        	err = parent->hooks->create_collection(parent);
+        }
+
+        if (err) {
             return dav_push_error(r->pool, err->status, 0,
                                   apr_psprintf(r->pool,
                                   "Could not create calendar provision "
@@ -1538,11 +1545,14 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r)
     }
 
     /* create calendar */
-    if ((err = dav_calendar_make_calendar(r, resource))) {
-        return err;
+    if (trigger->hooks->is_same_resource(trigger, resource)) {
+    	err = dav_calendar_make_calendar(r, trigger);
+    }
+    else {
+    	err = dav_calendar_make_calendar(r, resource);
     }
 
-    return NULL;
+    return err;
 }
 
 static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
@@ -1571,6 +1581,11 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
         else {
             dav_lookup_result lookup = { 0 };
 
+            /* sanity - if no path prefix, skip */
+            if (strncmp(r->uri, path, strlen(r->uri))) {
+            	continue;
+            }
+
             lookup = dav_lookup_uri(path, r, 0 /* must_be_absolute */);
 
             if (lookup.rnew == NULL) {
@@ -1583,7 +1598,7 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
             }
 
             /* make the calendar */
-            *err = dav_calendar_provision_calendar(lookup.rnew);
+            *err = dav_calendar_provision_calendar(lookup.rnew, resource);
             if (*err != NULL) {
                 return DONE;
             }
@@ -2252,7 +2267,7 @@ static int dav_calendar_method_precondition(request_rec *r,
         const apr_xml_doc *doc, dav_error **err)
 {
     /* handle auto provisioning */
-    if (src && !src->exists && src->collection) {
+    if (src && !src->exists) {
 
         /*
         ** The hook implementer must ensure behaviour of the hook is both safe and
