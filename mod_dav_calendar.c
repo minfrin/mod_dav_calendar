@@ -129,6 +129,17 @@ typedef struct
 
 } dav_calendar_config_rec;
 
+typedef struct {
+    const char *real;
+    const char *fake;
+    ap_regex_t *regexp;
+} dav_calendar_alias_entry;
+
+typedef struct
+{
+    apr_array_header_t *aliases;
+} dav_calendar_server_rec;
+
 /* forward-declare the hook structures */
 static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
 
@@ -141,6 +152,8 @@ static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
     "//EN\r\nBEGIN:VTIMEZONE\r\nTZID:UTC\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n"
 
 #define DEFAULT_MAX_RESOURCE_SIZE 10*1024*1024
+
+#define DAV_CALENDAR_HANDLER "httpd/calendar-summary"
 
 /* MKCALENDAR method */
 static int iM_MKCALENDAR;
@@ -521,15 +534,15 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
         }
         case DAV_CALENDAR_PROPID_calendar_home_set: {
             int i;
-            ap_expr_info_t **homes = (ap_expr_info_t **)conf->dav_calendar_homes->elts;
 
             apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
                     global_ns, info->name));
 
             for (i = 0; i < conf->dav_calendar_homes->nelts; ++i) {
                 const char *err = NULL, *url;
+                ap_expr_info_t *home = APR_ARRAY_IDX(conf->dav_calendar_homes, i, ap_expr_info_t *);
 
-                url = ap_expr_str_exec(r, homes[i], &err);
+                url = ap_expr_str_exec(r, home, &err);
                 if (err) {
                     ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
                                     "Failure while evaluating the calendar-home-set URL expression for '%s', "
@@ -662,7 +675,7 @@ static dav_options_provider options =
 static int dav_calendar_get_resource_type(const dav_resource *resource,
                                     const char **type, const char **uri)
 {
-    request_rec *r = resource->hooks->get_request_rec(resource);
+    request_rec *r;
 
     const dav_provider *provider;
     dav_error *err;
@@ -671,6 +684,13 @@ static int dav_calendar_get_resource_type(const dav_resource *resource,
     int result = DECLINED;
 
     *type = *uri = NULL;
+
+    if (resource && resource->hooks && resource->hooks->get_request_rec) {
+        r = resource->hooks->get_request_rec(resource);
+    }
+    else {
+        return result;
+    }
 
     /* find the dav provider */
     provider = dav_get_provider(r);
@@ -1528,10 +1548,10 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *
         dav_resource *parent = APR_ARRAY_IDX(mkcols, i, dav_resource *);
 
         if (trigger->hooks->is_same_resource(trigger, parent)) {
-        	err = trigger->hooks->create_collection(trigger);
+            err = trigger->hooks->create_collection(trigger);
         }
         else {
-        	err = parent->hooks->create_collection(parent);
+            err = parent->hooks->create_collection(parent);
         }
 
         if (err) {
@@ -1546,10 +1566,10 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *
 
     /* create calendar */
     if (trigger->hooks->is_same_resource(trigger, resource)) {
-    	err = dav_calendar_make_calendar(r, trigger);
+        err = dav_calendar_make_calendar(r, trigger);
     }
     else {
-    	err = dav_calendar_make_calendar(r, resource);
+        err = dav_calendar_make_calendar(r, resource);
     }
 
     return err;
@@ -1583,7 +1603,7 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
 
             /* sanity - if no path prefix, skip */
             if (strncmp(r->uri, path, strlen(r->uri))) {
-            	continue;
+                continue;
             }
 
             lookup = dav_lookup_uri(path, r, 0 /* must_be_absolute */);
@@ -1618,6 +1638,16 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
     return DONE;
 }
 
+static void *create_dav_calendar_config(apr_pool_t *p, server_rec *s)
+{
+    dav_calendar_server_rec *a =
+    (dav_calendar_server_rec *) apr_pcalloc(p, sizeof(dav_calendar_server_rec));
+
+    a->aliases = apr_array_make(p, 5, sizeof(dav_calendar_alias_entry));
+
+    return a;
+}
+
 static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
 {
     dav_calendar_config_rec *conf = apr_pcalloc(p, sizeof(dav_calendar_config_rec));
@@ -1629,6 +1659,18 @@ static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
     conf->dav_calendar_provisions = apr_array_make(p, 2, sizeof(const char *));
 
     return conf;
+}
+
+static void *merge_dav_calendar_config(apr_pool_t *p, void *basev, void *overridesv)
+{
+    dav_calendar_server_rec *a =
+    (dav_calendar_server_rec *) apr_pcalloc(p, sizeof(dav_calendar_server_rec));
+    dav_calendar_server_rec *base = (dav_calendar_server_rec *) basev;
+    dav_calendar_server_rec *overrides = (dav_calendar_server_rec *) overridesv;
+
+    a->aliases = apr_array_append(p, overrides->aliases, base->aliases);
+
+    return a;
 }
 
 static void *merge_dav_calendar_dir_config(apr_pool_t *p, void *basev, void *addv)
@@ -1742,6 +1784,47 @@ static const char *add_dav_calendar_provision(cmd_parms *cmd, void *dconf, const
     return NULL;
 }
 
+static const char *add_alias_internal(cmd_parms *cmd, void *dummy,
+                                      const char *fake, const char *real,
+                                      int use_regex)
+{
+    server_rec *s = cmd->server;
+    dav_calendar_server_rec *conf = ap_get_module_config(s->module_config,
+                                                   &dav_calendar_module);
+    dav_calendar_alias_entry *new = apr_array_push(conf->aliases);
+
+    const char *err = ap_check_cmd_context(cmd, NOT_IN_DIR_CONTEXT);
+
+    if (err != NULL) {
+        return err;
+    }
+
+    if (use_regex) {
+        new->regexp = ap_pregcomp(cmd->pool, fake, AP_REG_EXTENDED);
+        if (new->regexp == NULL)
+            return "Regular expression could not be compiled.";
+        new->real = real;
+    }
+    else {
+        new->real = real;
+    }
+    new->fake = fake;
+
+    return NULL;
+}
+
+static const char *add_dav_calendar_alias(cmd_parms *cmd, void *dummy, const char *fake,
+        const char *real)
+{
+    return add_alias_internal(cmd, dummy, fake, real, 0);
+}
+
+static const char *add_dav_calendar_alias_regex(cmd_parms *cmd, void *dummy,
+                                   const char *fake, const char *real)
+{
+    return add_alias_internal(cmd, dummy, fake, real, 1);
+}
+
 static const command_rec dav_calendar_cmds[] =
 {
     AP_INIT_FLAG("DavCalendar",
@@ -1757,6 +1840,10 @@ static const command_rec dav_calendar_cmds[] =
     AP_INIT_TAKE1("DavCalendarProvision", add_dav_calendar_provision, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for calendar auto provision. "
         "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}/Home\"."),
+    AP_INIT_TAKE2("DavCalendarAlias", add_dav_calendar_alias, NULL, RSRC_CONF | ACCESS_CONF,
+        "Calendar alias and the real calendar collection."),
+    AP_INIT_TAKE2("DavCalendarAliasMatch", add_dav_calendar_alias_regex, NULL, RSRC_CONF,
+        "A calendar alias regular expression and a calendar collecion URL to alias to"),
     { NULL }
 };
 
@@ -1874,6 +1961,11 @@ static int dav_calendar_handle_get(request_rec *r)
     apr_size_t ical_len;
     int depth = 1;
     int status;
+
+    /* for us? */
+    if (!r->handler || strcmp(r->handler, DIR_MAGIC_TYPE)) {
+        return DECLINED;
+    }
 
     /* find the dav provider */
     provider = dav_get_provider(r);
@@ -2241,11 +2333,73 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     }
 }
 
+static int dav_calendar_try_alias_list(request_rec *r, apr_array_header_t *aliases)
+{
+    dav_calendar_alias_entry *entries = (dav_calendar_alias_entry *) aliases->elts;
+    ap_regmatch_t regm[AP_MAX_REG_MATCH];
+    const char *found = NULL;
+    int i;
+
+    for (i = 0; i < aliases->nelts; ++i) {
+        dav_calendar_alias_entry *alias = &entries[i];
+
+        if (alias->regexp) {
+            if (!ap_regexec(alias->regexp, r->uri, AP_MAX_REG_MATCH, regm, 0)) {
+                if (alias->real) {
+                    found = ap_pregsub(r->pool, alias->real, r->uri,
+                                       AP_MAX_REG_MATCH, regm);
+                    if (!found) {
+                        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+                                      "Regex substitution in '%s' failed. "
+                                      "Replacement too long?", alias->real);
+                        return HTTP_INTERNAL_SERVER_ERROR;
+                    }
+                }
+                else {
+                    return HTTP_INTERNAL_SERVER_ERROR;
+                }
+            }
+        }
+        else {
+            if (!strcmp(r->uri, alias->fake)) {
+                ap_set_context_info(r, alias->fake, alias->real);
+                found = alias->real;
+            }
+        }
+
+        if (found) {
+
+            found = ap_escape_uri(r->pool, found);
+
+            if (r->args) {
+                found = apr_pstrcat(r->pool, found,
+                                      "?", r->args, NULL);
+            }
+
+            ap_internal_redirect(found, r);
+
+            return OK;
+        }
+
+    }
+
+    return DECLINED;
+}
+
 static int dav_calendar_handler(request_rec *r)
 {
+    dav_calendar_server_rec *serverconf = ap_get_module_config(r->server->module_config,
+            &dav_calendar_module);
 
     dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
+
+    int status;
+
+    status = dav_calendar_try_alias_list(r, serverconf->aliases);
+    if (status != DECLINED) {
+        return status;
+    }
 
     if (!conf || !conf->dav_calendar) {
         return DECLINED;
@@ -2297,8 +2451,25 @@ static int dav_calendar_fixups(request_rec *r)
     return OK;
 }
 
+static int dav_calendar_type_checker(request_rec *r)
+{
+    /*
+     * Short circuit other modules that want to overwrite the content type
+     * as soon as they detect a directory.
+     */
+    if (r->content_type && !strcmp(r->content_type, DAV_CALENDAR_HANDLER)) {
+        return OK;
+    }
+
+    return DECLINED;
+}
+
 static void register_hooks(apr_pool_t *p)
 {
+    static const char * const aszSucc[]={ "mod_autoindex.c",
+                                          "mod_userdir.c",
+                                          "mod_vhost_alias.c", NULL };
+
     ap_hook_post_config(dav_calendar_post_config, NULL, NULL, APR_HOOK_MIDDLE);
 
     dav_register_liveprop_group(p, &dav_calendar_liveprop_group);
@@ -2307,8 +2478,9 @@ static void register_hooks(apr_pool_t *p)
     dav_options_provider_register(p, "dav_calendar", &options);
     dav_resource_type_provider_register(p, "dav_calendar", &resource_types);
 
+    ap_hook_type_checker(dav_calendar_type_checker, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_fixups(dav_calendar_fixups, NULL, NULL, APR_HOOK_MIDDLE);
-    ap_hook_handler(dav_calendar_handler, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_handler(dav_calendar_handler, NULL, aszSucc, APR_HOOK_MIDDLE);
 
     dav_hook_deliver_report(dav_calendar_deliver_report, NULL, NULL, APR_HOOK_MIDDLE);
     dav_hook_gather_reports(dav_calendar_gather_reports,
@@ -2323,8 +2495,8 @@ AP_DECLARE_MODULE(dav_calendar) =
     STANDARD20_MODULE_STUFF,
     create_dav_calendar_dir_config, /* dir config creater */
     merge_dav_calendar_dir_config,  /* dir merger --- default is to override */
-    NULL,                           /* server config */
-    NULL,                           /* merge server config */
+    create_dav_calendar_config,     /* server config */
+    merge_dav_calendar_config,      /* merge server config */
     dav_calendar_cmds,              /* command apr_table_t */
     register_hooks                  /* register hooks */
 };
