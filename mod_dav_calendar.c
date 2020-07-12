@@ -2585,9 +2585,11 @@ void dav_calendar_gather_reports(request_rec *r, const dav_resource *resource,
     report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
     report->name = "calendar-multiget";
 
+    /*
     report = apr_array_push(reports);
     report->nmspace = DAV_CALENDAR_XML_NAMESPACE;
     report->name = "free-busy-query";
+    */
 }
 
 static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *resource,
