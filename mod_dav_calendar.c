@@ -665,6 +665,16 @@ static dav_error *dav_calendar_prop_time_range(dav_calendar_ctx *ctx,
 	return NULL;
 }
 
+static void dav_calendar_alarm_callback(icalcomponent *comp,
+		struct icaltime_span *span, void *data)
+{
+	dav_calendar_ctx *ctx = data;
+
+	/* we have a match! */
+	ctx->match = 1;
+
+}
+
 static void dav_calendar_event_callback(icalcomponent *comp,
 		struct icaltime_span *span, void *data)
 {
@@ -876,13 +886,60 @@ static dav_error *dav_calendar_comp_time_range(dav_calendar_ctx *ctx,
 		 * Such a VALARM component is said to overlap a given time range if at
 		 * least one of its triggers overlaps the time range.
 		 */
-		// icalproperty *trigger = icalcomponent_get_first_property(comp,
-		//				ICAL_TRIGGER_PROPERTY);
+		icalproperty *prop;
+		struct icaltriggertype tr;
+		struct icaldurationtype duration = icaldurationtype_null_duration();
+		int repeat = 1;
 
-		/* return a match for all alarms, until libical can process triggers
-		 * for us.
-		 */
-		ctx->match = 1;
+		if ((prop = icalcomponent_get_first_property(comp,
+				ICAL_TRIGGER_PROPERTY))) {
+
+			tr = icalproperty_get_trigger(prop);;
+
+			if (!icaltime_is_null_time(tr.time)) {
+
+				/* simple time value - direct comparison */
+
+        		icaltime_span span = icaltime_span_new(tr.time, tr.time, 1);
+        		icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
+
+        		if (icaltime_span_overlaps(&span, &limit)) {
+
+        			/* we have a match! */
+        			ctx->match = 1;
+
+        		}
+
+
+			}
+			else {
+
+				/* this is fun - relative to the parent then */
+
+				icaltimetype st = *stt;
+				icaltimetype et = *ett;
+
+	            if ((prop = icalcomponent_get_first_property(comp,
+						ICAL_DURATION_PROPERTY))) {
+					duration = icalproperty_get_duration(prop);
+				}
+
+				if ((prop = icalcomponent_get_first_property(comp,
+						ICAL_REPEAT_PROPERTY))) {
+					repeat = icalproperty_get_repeat(prop) + 1;
+				}
+
+				icaltime_adjust(&st, 0, 0, 0,
+						icaldurationtype_as_int(duration) * repeat);
+				icaltime_adjust(&et, 0, 0, 0,
+						icaldurationtype_as_int(duration) * repeat);
+
+				icalcomponent_foreach_recurrence(icalcomponent_get_parent(comp),
+						st, et, dav_calendar_alarm_callback, ctx);
+
+			}
+
+		}
 
 		break;
 	}
@@ -973,65 +1030,65 @@ static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
 			elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
 		}
 
-		param = icalproperty_get_next_parameter(prop,
-				ICAL_ANY_PARAMETER);
-	}
+		if (!found) {
+			/* not found, no match yet, unless... */
 
-	if (!found) {
-		/* not found, no match yet, unless... */
+	        elem = param_filter;
 
-        elem = param_filter;
+			while (elem) {
+				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
 
-		while (elem) {
-			if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+					/* we have a match! */
+					ctx->match = 1;
 
-				/* we have a match! */
-				ctx->match = 1;
+					break;
+				}
 
-				break;
+				elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
 			}
 
-			elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
-		}
+		} else {
 
-	} else {
+			/* found, look at the next level */
 
-		/* found, look at the next level */
+			/* explicit is-not-defined? */
+			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+				/* found, but we didn't want to find, so no match */
 
-		/* explicit is-not-defined? */
-		if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-			/* found, but we didn't want to find, so no match */
+			}
 
-		}
+			else {
 
-		else {
+				text_match = dav_find_child_ns(elem, ctx->ns, "text-match");
+				if (text_match) {
 
-			text_match = dav_find_child_ns(elem, ctx->ns, "text-match");
-			if (text_match) {
+	                const char *text =
+	                        icalparameter_enum_to_string(icalparameter_get_value(param));
 
-                const char *text =
-                        icalparameter_enum_to_string(icalparameter_get_value(param));
+	                if (!text) {
+	                    text = icalparameter_get_xvalue(param);
+	                }
 
-                if (!text) {
-                    text = icalparameter_get_xvalue(param);
-                }
+					err = dav_calendar_text_match(ctx, timezone, text_match, text);
+					if (err) {
+						return err;
+					}
 
-				err = dav_calendar_text_match(ctx, timezone, text_match, text);
-				if (err) {
-					return err;
+				}
+
+				/* none of the above? we have a match */
+				if (!stt && !ett && !text_match) {
+
+					/* we have a match! */
+					ctx->match = 1;
+
 				}
 
 			}
-
-			/* none of the above? we have a match */
-			if (!stt && !ett && !text_match) {
-
-				/* we have a match! */
-				ctx->match = 1;
-
-			}
-
 		}
+
+		param = icalproperty_get_next_parameter(prop,
+				ICAL_ANY_PARAMETER);
 	}
 
 	return NULL;
@@ -1097,89 +1154,89 @@ static dav_error *dav_calendar_prop_filter(dav_calendar_ctx *ctx,
 			elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
 		}
 
+		if (!found) {
+			/* not found, no match yet, unless... */
+
+	        elem = prop_filter;
+
+			while (elem) {
+				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+
+					/* we have a match! */
+					ctx->match = 1;
+
+					break;
+				}
+
+				elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
+			}
+
+		} else {
+
+			/* found, look at the next level */
+
+			/* explicit is-not-defined? */
+			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+				/* found, but we didn't want to find, so no match */
+
+			}
+
+			else {
+
+				if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
+
+					err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
+					if (err) {
+						return err;
+					}
+
+				}
+
+				if ((text_match = dav_find_child_ns(elem, ctx->ns, "text-match"))) {
+
+					const char *text = icalproperty_get_value_as_string(prop);
+
+					err = dav_calendar_text_match(ctx, timezone, text_match, text);
+					if (err) {
+						return err;
+					}
+
+				}
+
+				if ((param_filter = dav_find_child_ns(elem, ctx->ns,
+						"param-filter"))) {
+
+					err = dav_calendar_param_filter(ctx, timezone, param_filter,
+							prop, icalproperty_get_first_parameter(prop,
+									ICAL_ANY_PARAMETER), stt, ett);
+					if (err) {
+						return err;
+					}
+				}
+
+				if (stt && ett) {
+
+					err = dav_calendar_prop_time_range(ctx, timezone, comp, prop,
+							stt, ett);
+					if (err) {
+						return err;
+					}
+
+				}
+
+				/* none of the above? we have a match */
+				if (!stt && !ett && !time_range && !text_match && !param_filter) {
+
+					/* we have a match! */
+					ctx->match = 1;
+
+				}
+
+			}
+		}
+
 		prop = icalcomponent_get_next_property(comp,
 				ICAL_ANY_PROPERTY);
-	}
-
-	if (!found) {
-		/* not found, no match yet, unless... */
-
-        elem = prop_filter;
-
-		while (elem) {
-			if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
-
-				/* we have a match! */
-				ctx->match = 1;
-
-				break;
-			}
-
-			elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
-		}
-
-	} else {
-
-		/* found, look at the next level */
-
-		/* explicit is-not-defined? */
-		if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-			/* found, but we didn't want to find, so no match */
-
-		}
-
-		else {
-
-			if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
-
-				err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
-				if (err) {
-					return err;
-				}
-
-			}
-
-			if ((text_match = dav_find_child_ns(elem, ctx->ns, "text-match"))) {
-
-				const char *text = icalproperty_get_value_as_string(prop);
-
-				err = dav_calendar_text_match(ctx, timezone, text_match, text);
-				if (err) {
-					return err;
-				}
-
-			}
-
-			if ((param_filter = dav_find_child_ns(elem, ctx->ns,
-					"param-filter"))) {
-
-				err = dav_calendar_param_filter(ctx, timezone, param_filter,
-						prop, icalproperty_get_first_parameter(prop,
-								ICAL_ANY_PARAMETER), stt, ett);
-				if (err) {
-					return err;
-				}
-			}
-
-			if (stt && ett) {
-
-				err = dav_calendar_prop_time_range(ctx, timezone, comp, prop,
-						stt, ett);
-				if (err) {
-					return err;
-				}
-
-			}
-
-			/* none of the above? we have a match */
-			if (!stt && !ett && !time_range && !text_match && !param_filter) {
-
-				/* we have a match! */
-				ctx->match = 1;
-
-			}
-
-		}
 	}
 
 	return NULL;
@@ -1246,109 +1303,109 @@ static dav_error *dav_calendar_comp_filter(dav_calendar_ctx *ctx,
 			elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
 		}
 
-		comp = icalcomponent_get_next_component(comp,
-				ICAL_ANY_COMPONENT);
-    }
+		if (!found) {
+			/* not found, no match yet, unless... */
 
-	if (!found) {
-		/* not found, no match yet, unless... */
+	        elem = comp_filter;
 
-        elem = comp_filter;
+			while (elem) {
+				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
 
-		while (elem) {
-			if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+					/* we have a match! */
+					ctx->match = 1;
 
-				/* we have a match! */
-				ctx->match = 1;
+					break;
+				}
 
-				break;
+				elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
 			}
 
-			elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
-		}
+		} else {
 
-	} else {
+			/* found, look at the next level */
 
-		/* found, look at the next level */
-
-		/* explicit is-not-defined? */
-		if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-			/* found, but we didn't want to find, so no match */
-
-		}
-
-		else {
-
-			if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
-
-				err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
-				if (err) {
-					return err;
-				}
+			/* explicit is-not-defined? */
+			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+				/* found, but we didn't want to find, so no match */
 
 			}
 
-			if ((prop_filter = dav_find_child_ns(elem, ctx->ns,
-					"prop-filter"))) {
+			else {
 
-				err = dav_calendar_prop_filter(ctx, timezone, prop_filter,
-						comp, icalcomponent_get_first_property(comp,
-								ICAL_ANY_PROPERTY), stt, ett);
-				if (err) {
-					return err;
-				}
-			}
+				if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
 
-			if ((comp_filter = dav_find_child_ns(elem, ctx->ns, "comp-filter"))
-					== NULL) {
-
-				err = dav_calendar_comp_filter(ctx, timezone, comp_filter,
-						icalcomponent_get_first_component(comp,
-								ICAL_ANY_COMPONENT), stt, ett);
-				if (err) {
-					return err;
-				}
-			}
-
-			if (stt && ett && !comp_filter && !prop_filter) {
-
-				if (icalcomponent_isa(comp)) {
-
-					comp = icalcomponent_get_first_component(comp,
-													ICAL_ANY_COMPONENT);
-					while (comp) {
-
-						err = dav_calendar_comp_time_range(ctx, timezone, comp,
-								stt, ett);
-						if (err) {
-							return err;
-						}
-
-						comp = icalcomponent_get_next_component(comp,
-								ICAL_ANY_COMPONENT);
-					}
-				}
-				else {
-
-					err = dav_calendar_comp_time_range(ctx, timezone, comp, stt,
-							ett);
+					err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
 					if (err) {
 						return err;
 					}
 
 				}
 
-			}
+				if ((prop_filter = dav_find_child_ns(elem, ctx->ns,
+						"prop-filter"))) {
 
-			/* none of the above? we have a match */
-			if (!stt && !ett && !time_range && !prop_filter && !comp_filter) {
+					err = dav_calendar_prop_filter(ctx, timezone, prop_filter,
+							comp, icalcomponent_get_first_property(comp,
+									ICAL_ANY_PROPERTY), stt, ett);
+					if (err) {
+						return err;
+					}
+				}
 
-				/* we have a match! */
-				ctx->match = 1;
+				if ((comp_filter = dav_find_child_ns(elem, ctx->ns,
+						"comp-filter"))) {
 
+					err = dav_calendar_comp_filter(ctx, timezone, comp_filter,
+							icalcomponent_get_first_component(comp,
+									ICAL_ANY_COMPONENT), stt, ett);
+					if (err) {
+						return err;
+					}
+				}
+
+				if (stt && ett && !comp_filter && !prop_filter) {
+
+					if (icalcomponent_isa(comp) == ICAL_VCALENDAR_COMPONENT) {
+
+						comp = icalcomponent_get_first_component(comp,
+														ICAL_ANY_COMPONENT);
+						while (comp) {
+
+							err = dav_calendar_comp_time_range(ctx, timezone, comp,
+									stt, ett);
+							if (err) {
+								return err;
+							}
+
+							comp = icalcomponent_get_next_component(comp,
+									ICAL_ANY_COMPONENT);
+						}
+					}
+					else {
+
+						err = dav_calendar_comp_time_range(ctx, timezone, comp, stt,
+								ett);
+						if (err) {
+							return err;
+						}
+
+					}
+
+				}
+
+				/* none of the above? we have a match */
+				if (!stt && !ett && !time_range && !prop_filter && !comp_filter) {
+
+					/* we have a match! */
+					ctx->match = 1;
+
+				}
 			}
 		}
-	}
+
+		comp = icalcomponent_get_next_component(comp,
+				ICAL_ANY_COMPONENT);
+    }
 
 	return NULL;
 }
