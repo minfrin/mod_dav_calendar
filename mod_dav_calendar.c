@@ -548,6 +548,52 @@ static dav_error *dav_calendar_text_match(dav_calendar_ctx *ctx,
     return NULL;
 }
 
+static struct icaltimetype dav_calendar_get_datetime_with_component(
+		icalproperty *prop, icalcomponent *comp)
+{
+    icalcomponent *cp;
+    icalparameter *param;
+
+    struct icaltimetype ret;
+
+    ret = icalvalue_get_datetime(icalproperty_get_value(prop));
+
+    if (icaltime_is_utc(ret)) {
+        return ret;
+    }
+
+    if ((param = icalproperty_get_first_parameter(prop, ICAL_TZID_PARAMETER)) != NULL) {
+        const char *tzid = icalparameter_get_tzid(param);
+        icaltimezone *tz = NULL;
+
+        if (!comp) {
+            comp = icalproperty_get_parent(prop);
+        }
+
+        for (cp = comp; cp; cp = icalcomponent_get_parent(cp)) {
+
+        	tz = icalcomponent_get_timezone(cp, tzid);
+            if (tz) {
+                break;
+            }
+        }
+
+        if (!tz) {
+            tz = icaltimezone_get_builtin_timezone_from_tzid(tzid);
+        }
+
+        if (!tz) {
+            tz = icaltimezone_get_builtin_timezone(tzid);
+        }
+
+        if (tz) {
+            ret = icaltime_set_timezone(&ret, tz);
+        }
+    }
+
+    return ret;
+}
+
 static dav_error *dav_calendar_time_range(dav_calendar_ctx *ctx,
         const apr_xml_elem *timezone, const apr_xml_elem *time_range,
         icaltimetype **stt, icaltimetype **ett)
@@ -653,7 +699,7 @@ static dav_error *dav_calendar_prop_time_range(dav_calendar_ctx *ctx,
     case ICAL_CREATED_PROPERTY:
     case ICAL_LASTMODIFIED_PROPERTY:
 
-        time = icalproperty_get_datetime_with_component(prop, comp);
+        time = dav_calendar_get_datetime_with_component(prop, comp);
 
         break;
     default:
