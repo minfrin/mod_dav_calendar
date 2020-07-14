@@ -549,7 +549,7 @@ static dav_error *dav_calendar_text_match(dav_calendar_ctx *ctx,
 }
 
 static struct icaltimetype dav_calendar_get_datetime_with_component(
-		icalproperty *prop, icalcomponent *comp)
+        icalproperty *prop, icalcomponent *comp)
 {
     icalcomponent *cp;
     icalparameter *param;
@@ -572,7 +572,7 @@ static struct icaltimetype dav_calendar_get_datetime_with_component(
 
         for (cp = comp; cp; cp = icalcomponent_get_parent(cp)) {
 
-        	tz = icalcomponent_get_timezone(cp, tzid);
+            tz = icalcomponent_get_timezone(cp, tzid);
             if (tz) {
                 break;
             }
@@ -1792,18 +1792,22 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
             /* found a calendar? */
             if (comp) {
 
-                /* apply search <C:filter/>, ctx->match will contain the result */
-                ctx->err = dav_calendar_filter(ctx, comp);
-                if (ctx->err) {
-                    icalcomponent_free(comp);
-                    return APR_EGENERAL;
-                }
+                if (ctx->element && ctx->element->elem) {
 
-                /* strip away everything not listed beneath <C:comp/> */
-                ctx->err = dav_calendar_comp(ctx, ctx->element->elem, &comp);
-                if (ctx->err) {
-                    icalcomponent_free(comp);
-                    return APR_EGENERAL;
+                    /* apply search <C:filter/>, ctx->match will contain the result */
+                    ctx->err = dav_calendar_filter(ctx, comp);
+                    if (ctx->err) {
+                        icalcomponent_free(comp);
+                        return APR_EGENERAL;
+                    }
+
+                    /* strip away everything not listed beneath <C:comp/> */
+                    ctx->err = dav_calendar_comp(ctx, ctx->element->elem,
+                            &comp);
+                    if (ctx->err) {
+                        icalcomponent_free(comp);
+                        return APR_EGENERAL;
+                    }
                 }
 
                 if (!ctx->comp) {
@@ -1843,8 +1847,10 @@ static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
     f->r = r;
     f->ctx = ctx;
 
-    ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
-            DAV_CALENDAR_XML_NAMESPACE);
+    if (ctx->element && ctx->element->doc && ctx->element->namespaces) {
+        ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
+                DAV_CALENDAR_XML_NAMESPACE);
+    }
     ctx->bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 
     ctx->parser = icalparser_new();
