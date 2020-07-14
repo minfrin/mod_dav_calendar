@@ -1708,7 +1708,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
             break;
         }
 
-        /* grab a line */
+        /* grab a line of max HUGE_STRING_LEN - RFC5545 says SHOULD be 75 chars, not MUST */
 		if (APR_SUCCESS
 				== (rv = apr_brigade_split_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
 	        apr_off_t offset = 0;
