@@ -1847,7 +1847,7 @@ static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
     f->r = r;
     f->ctx = ctx;
 
-    if (ctx->element && ctx->element->doc && ctx->element->namespaces) {
+    if (ctx->element && ctx->element->doc && ctx->element->doc->namespaces) {
         ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
                 DAV_CALENDAR_XML_NAMESPACE);
     }
