@@ -329,7 +329,8 @@ typedef struct dav_calendar_ctx {
     dav_error *err;
     icalparser *parser;
     icalcomponent *comp;
-    dav_liveprop_elem *element;
+    const apr_xml_doc *doc;
+    const apr_xml_elem *elem;
     apr_sha1_ctx_t *sha1;
     int ns;
     int match;
@@ -595,8 +596,7 @@ static struct icaltimetype dav_calendar_get_datetime_with_component(
 }
 
 static dav_error *dav_calendar_time_range(dav_calendar_ctx *ctx,
-        const apr_xml_elem *timezone, const apr_xml_elem *time_range,
-        icaltimetype **stt, icaltimetype **ett)
+        const apr_xml_elem *time_range, icaltimetype **stt, icaltimetype **ett)
 {
     dav_error *err;
 
@@ -1022,6 +1022,133 @@ static dav_error *dav_calendar_comp_time_range(dav_calendar_ctx *ctx,
     return NULL;
 }
 
+static void dav_calendar_freebusy_callback(icalcomponent *comp,
+        struct icaltime_span *span, void *data)
+{
+    icalcomponent *freebusy = data;
+    icalproperty *prop;
+    icalparameter *param;
+    icaltimezone *utc_zone;
+
+    enum icalproperty_status status;
+    struct icalperiodtype period;
+
+    status = icalcomponent_get_status(comp);
+
+    utc_zone = icaltimezone_get_utc_timezone();
+
+    if (span->is_busy) {
+
+        period.start = icaltime_from_timet_with_zone(span->start, 0, utc_zone);
+        period.end = icaltime_from_timet_with_zone(span->end, 0, utc_zone);
+        period.duration = icaldurationtype_null_duration();
+
+        prop = icalproperty_new_freebusy(period);
+        param = icalparameter_new_fbtype(ICAL_FBTYPE_BUSY);
+        icalproperty_add_parameter(prop, param);
+
+        icalcomponent_add_property(freebusy, prop);
+    }
+
+    else if (status == ICAL_STATUS_TENTATIVE) {
+
+        period.start = icaltime_from_timet_with_zone(span->start, 0, utc_zone);
+        period.end = icaltime_from_timet_with_zone(span->end, 0, utc_zone);
+        period.duration = icaldurationtype_null_duration();
+
+        prop = icalproperty_new_freebusy(period);
+        param = icalparameter_new_fbtype(ICAL_FBTYPE_BUSYTENTATIVE);
+        icalproperty_add_parameter(prop, param);
+
+        icalcomponent_add_property(freebusy, prop);
+    }
+
+}
+
+static dav_error *dav_calendar_freebusy_time_range(dav_calendar_ctx *ctx,
+        icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
+{
+
+    icalcomponent *freebusy, *cp, *next;
+
+    /*
+     * Only VEVENT components without a TRANSP property or with the TRANSP
+     * property set to OPAQUE, and VFREEBUSY components SHOULD be considered
+     * in generating the free busy time information.
+     *
+     * In the case of VEVENT components, the free or busy time type (FBTYPE)
+     * of the FREEBUSY properties in the returned VFREEBUSY component SHOULD
+     * be derived from the value of the TRANSP and STATUS properties, as
+     * outlined in the table below:
+     *
+     *   +---------------------------++------------------+
+     *   |          VEVENT           ||    VFREEBUSY     |
+     *   +-------------+-------------++------------------+
+     *   | TRANSP      | STATUS      || FBTYPE           |
+     *   +=============+=============++==================+
+     *   |             | CONFIRMED   || BUSY             |
+     *   |             | (default)   ||                  |
+     *   | OPAQUE      +-------------++------------------+
+     *   | (default)   | CANCELLED   || FREE             |
+     *   |             +-------------++------------------+
+     *   |             | TENTATIVE   || BUSY-TENTATIVE   |
+     *   |             +-------------++------------------+
+     *   |             | x-name      || BUSY or          |
+     *   |             |             || x-name           |
+     *   +-------------+-------------++------------------+
+     *   |             | CONFIRMED   ||                  |
+     *   | TRANSPARENT | CANCELLED   || FREE             |
+     *   |             | TENTATIVE   ||                  |
+     *   |             | x-name      ||                  |
+     *   +-------------+-------------++------------------+
+     *
+     */
+    freebusy = icalcomponent_get_first_component(comp,
+            ICAL_VFREEBUSY_COMPONENT);
+
+    if (freebusy) {
+        icalcomponent_remove_component(comp, freebusy);
+    }
+    else {
+        freebusy = icalcomponent_new(ICAL_VFREEBUSY_COMPONENT);
+
+        icalcomponent_add_property(freebusy, icalproperty_new_dtstart(*stt));
+        icalcomponent_add_property(freebusy, icalproperty_new_dtend(*ett));
+    }
+
+    for (cp = icalcomponent_get_first_component(comp, ICAL_ANY_COMPONENT);
+           cp; cp = next) {
+
+        if (icalcomponent_isa(cp) == ICAL_VEVENT_COMPONENT) {
+
+            icalcomponent_foreach_recurrence(comp,
+                    *stt, *ett, dav_calendar_freebusy_callback, freebusy);
+
+        }
+        else if (icalcomponent_isa(cp) == ICAL_VTIMEZONE_COMPONENT) {
+            continue;
+        }
+
+        next = icalcomponent_get_next_component(comp, ICAL_ANY_COMPONENT);
+
+        icalcomponent_remove_component(comp, cp);
+    }
+
+    /*
+     * If no calendar object resources are found to satisfy these
+     * conditions, a VFREEBUSY component with no FREEBUSY property MUST be
+     * returned.
+     */
+    if (icalcomponent_count_properties(freebusy, ICAL_FREEBUSY_PROPERTY)) {
+        icalcomponent_add_component(comp, freebusy);
+    }
+    else {
+        icalcomponent_free(freebusy);
+    }
+
+    return NULL;
+}
+
 static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
         const apr_xml_elem *timezone, const apr_xml_elem *param_filter,
         icalproperty *prop, icalparameter *param, icaltimetype *stt,
@@ -1240,7 +1367,7 @@ static dav_error *dav_calendar_prop_filter(dav_calendar_ctx *ctx,
 
                 if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
 
-                    err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
+                    err = dav_calendar_time_range(ctx, time_range, &stt, &ett);
                     if (err) {
                         return err;
                     }
@@ -1389,7 +1516,7 @@ static dav_error *dav_calendar_comp_filter(dav_calendar_ctx *ctx,
 
                 if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
 
-                    err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
+                    err = dav_calendar_time_range(ctx, time_range, &stt, &ett);
                     if (err) {
                         return err;
                     }
@@ -1469,10 +1596,16 @@ static dav_error *dav_calendar_filter(dav_calendar_ctx *ctx, icalcomponent *comp
 {
     dav_error *err;
 
-    const apr_xml_doc *doc = ctx->element->doc;
+    const apr_xml_doc *doc = NULL;
     const apr_xml_elem *filter = NULL;
     const apr_xml_elem *comp_filter = NULL;
     const apr_xml_elem *timezone = NULL;
+
+    if (!ctx->doc) {
+        return NULL;
+    }
+
+    doc = ctx->doc;
 
     /*
      * <!ELEMENT calendar-query ((DAV:allprop |
@@ -1537,7 +1670,31 @@ static dav_error *dav_calendar_filter(dav_calendar_ctx *ctx, icalcomponent *comp
 
     else if (dav_validate_root_ns(doc, ctx->ns, "free-busy-query")) {
 
-        // TODO filter me
+        icaltimetype *stt;
+        icaltimetype *ett;
+
+        const apr_xml_elem *time_range = NULL;
+
+        if ((time_range = dav_find_child_ns(doc->root, ctx->ns, "time-range"))) {
+
+            err = dav_calendar_time_range(ctx, time_range, &stt, &ett);
+            if (err) {
+                return err;
+            }
+
+        }
+        else {
+            /* MUST violation */
+            err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
+                    "Time-range element must exist beneath free-busy-query element");
+            err->tagname = "CALDAV:valid-filter";
+            return err;
+        }
+
+        if ((err = dav_calendar_freebusy_time_range(ctx, comp, stt, ett))) {
+            return err;
+        }
+
         return NULL;
     }
 
@@ -1792,17 +1949,17 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
             /* found a calendar? */
             if (comp) {
 
-                if (ctx->element && ctx->element->elem) {
+                /* apply search <C:filter/>, ctx->match will contain the result */
+                ctx->err = dav_calendar_filter(ctx, comp);
+                if (ctx->err) {
+                    icalcomponent_free(comp);
+                    return APR_EGENERAL;
+                }
 
-                    /* apply search <C:filter/>, ctx->match will contain the result */
-                    ctx->err = dav_calendar_filter(ctx, comp);
-                    if (ctx->err) {
-                        icalcomponent_free(comp);
-                        return APR_EGENERAL;
-                    }
+                if (ctx->elem) {
 
                     /* strip away everything not listed beneath <C:comp/> */
-                    ctx->err = dav_calendar_comp(ctx, ctx->element->elem,
+                    ctx->err = dav_calendar_comp(ctx, ctx->elem,
                             &comp);
                     if (ctx->err) {
                         icalcomponent_free(comp);
@@ -1847,8 +2004,10 @@ static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
     f->r = r;
     f->ctx = ctx;
 
-    if (ctx->element && ctx->element->doc && ctx->element->doc->namespaces) {
-        ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
+    ctx->match = 0;
+
+    if (ctx->doc && ctx->doc->namespaces) {
+        ctx->ns = apr_xml_insert_uri(ctx->doc->namespaces,
                 DAV_CALENDAR_XML_NAMESPACE);
     }
     ctx->bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
@@ -1909,10 +2068,16 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
         switch (propid) {
         case DAV_CALENDAR_PROPID_calendar_data: {
             dav_error *err;
+            dav_liveprop_elem *element;
             dav_calendar_ctx ctx = { 0 };
             ctx.r = r;
 
-            apr_pool_userdata_get((void **)&ctx.element, DAV_PROP_ELEMENT, resource->pool);
+            apr_pool_userdata_get((void **)&element, DAV_PROP_ELEMENT, resource->pool);
+
+            if (element) {
+                ctx.doc = element->doc;
+                ctx.elem = element->elem;
+            }
 
             /* we have to "deliver" the stream into an output filter */
             if (!resource->hooks->handle_get) {
@@ -1920,6 +2085,8 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
                 request_rec *rr = ap_sub_req_method_uri("GET", resource->uri, r,
                         dav_calendar_create_parse_icalendar_filter(r, &ctx));
+
+                ctx.r = rr;
 
                 status = ap_run_sub_req(rr);
                 if (status != OK) {
@@ -2266,6 +2433,95 @@ static dav_resource_type_provider resource_types =
 {
     dav_calendar_get_resource_type
 };
+
+static dav_error * dav_calendar_etag_walker(dav_walk_resource *wres, int calltype)
+{
+    dav_calendar_ctx *cctx = wres->walk_ctx;
+    const char *etag;
+
+    /* avoid loops */
+    if (calltype != DAV_CALLTYPE_MEMBER) {
+        return NULL;
+    }
+
+    etag = (*wres->resource->hooks->getetag)(wres->resource);
+
+    if (etag) {
+        if (cctx->sha1) {
+            apr_sha1_update(cctx->sha1, etag, strlen(etag));
+        }
+    }
+    else {
+        cctx->sha1 = NULL;
+    }
+
+    return NULL;
+}
+
+static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype)
+{
+    request_rec *r = wres->resource->hooks->get_request_rec(wres->resource);
+
+    dav_calendar_ctx *cctx = wres->walk_ctx;
+    dav_error *err;
+
+    /* avoid loops */
+    if (calltype != DAV_CALLTYPE_MEMBER) {
+        return NULL;
+    }
+
+    err = cctx->err = NULL;
+
+    /* check for any method preconditions */
+    if (dav_run_method_precondition(cctx->r, NULL, wres->resource, NULL, &err) != DECLINED
+            && err) {
+        dav_log_err(r, err, APLOG_DEBUG);
+        return NULL;
+    }
+
+    /* we have to "deliver" the stream into an output filter */
+    if (!wres->resource->hooks->handle_get) {
+        int status;
+
+        request_rec *rr = ap_sub_req_method_uri("GET", wres->resource->uri, r,
+                dav_calendar_create_parse_icalendar_filter(r, cctx));
+
+        status = ap_run_sub_req(rr);
+        if (status != OK) {
+
+            err = dav_push_error(rr->pool, status, 0,
+                    "Unable to read calendar.",
+                    cctx->err);
+
+        }
+        ap_destroy_sub_req(rr);
+
+    }
+
+    /* mod_dav delivers the body */
+    else if ((err = (*wres->resource->hooks->deliver)(wres->resource,
+            dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
+
+        err = dav_push_error(r->pool, 0, 0,
+                "Unable to read calendar.", err);
+
+    }
+
+    /* how did the parsing go? */
+    if (!cctx->comp) {
+
+        err = dav_push_error(r->pool, 0, 0,
+                "Unable to parse calendar.",
+                cctx->err);
+
+    }
+
+    if (err) {
+        dav_log_err(r, err, APLOG_DEBUG);
+    }
+
+    return NULL;
+}
 
 /* Use POOL to temporarily construct a dav_response object (from WRES
    STATUS, and PROPSTATS) and stream it via WRES's ctx->brigade. */
@@ -2652,8 +2908,113 @@ static dav_error *dav_calendar_free_busy_query_report(request_rec *r,
     const dav_resource *resource,
     const apr_xml_doc *doc, ap_filter_t *output)
 {
-    return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
-            "The requested report is not supported yet");
+    dav_error *err;
+    dav_walk_params w = { 0 };
+    dav_calendar_ctx cctx = { 0 };
+    dav_response *multi_status;
+    apr_bucket *e;
+    icalcomponent *timezone;
+    const char *ical;
+    apr_size_t ical_len;
+    int depth;
+    int ns = 0;
+    int status;
+
+    if (0) {
+        return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
+                "The requested report is not supported yet");
+    }
+
+    /* ### validate that only time-range is present */
+
+    ns = apr_xml_insert_uri(doc->namespaces, DAV_CALENDAR_XML_NAMESPACE);
+
+    if (!dav_find_child_ns(doc->root, ns, "time-range")) {
+        /* "calendar-query" element must have filter */
+        return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
+                "The \"calendar-query\" element does not contain a "
+                "time-range element.");
+    }
+
+    if ((depth = dav_get_depth(r, 0)) < 0) {
+        return dav_new_error(resource->pool, HTTP_BAD_REQUEST, 0, 0,
+                "The \"depth\" header was not valid.");
+    }
+
+    w.walk_type = DAV_WALKTYPE_NORMAL | DAV_WALKTYPE_AUTH;
+    w.func = dav_calendar_get_walker;
+    w.walk_ctx = &cctx;
+    w.pool = r->pool;
+    w.root = resource;
+
+    cctx.doc = (apr_xml_doc *)doc;
+    cctx.r = r;
+    cctx.bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
+
+    /* ### should open read-only */
+    if ((err = dav_open_lockdb(r, 0, &w.lockdb)) != NULL) {
+        return dav_push_error(r->pool, err->status, 0,
+                             "The lock database could not be opened, "
+                             "preventing access to the various lock "
+                             "properties for the PROPFIND.",
+                             err);
+    }
+    if (w.lockdb != NULL) {
+        /* if we have a lock database, then we can walk locknull resources */
+        w.walk_type |= DAV_WALKTYPE_LOCKNULL;
+    }
+
+    /* Have the provider walk the resource. */
+    err = (*resource->hooks->walk)(&w, depth, &multi_status);
+
+    if (w.lockdb != NULL) {
+        (*w.lockdb->hooks->close_lockdb)(w.lockdb);
+    }
+
+    if (err != NULL) {
+        return err;
+    }
+
+    /* remove timezone component, not wanted for this report */
+    while ((timezone = icalcomponent_get_first_component(cctx.comp,
+            ICAL_VTIMEZONE_COMPONENT))) {
+        if (timezone) {
+            icalcomponent_remove_component(cctx.comp, timezone);
+            icalcomponent_free(timezone);
+        }
+    }
+
+    ical = icalcomponent_as_ical_string(cctx.comp);
+    ical_len = strlen(ical);
+
+    apr_brigade_cleanup(cctx.bb);
+
+    ap_set_content_length(r, ical_len);
+    ap_set_content_type(r, "text/calendar");
+
+    e = apr_bucket_pool_create(ical, ical_len, r->pool,
+            r->connection->bucket_alloc);
+    APR_BRIGADE_INSERT_TAIL(cctx.bb, e);
+
+    e = apr_bucket_eos_create(r->connection->bucket_alloc);
+    APR_BRIGADE_INSERT_TAIL(cctx.bb, e);
+
+    status = ap_pass_brigade(r->output_filters, cctx.bb);
+
+    if (status == APR_SUCCESS
+        || r->status != HTTP_OK
+        || r->connection->aborted) {
+        /* all ok */
+    }
+    else {
+        /* no way to know what type of error occurred */
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, status, r,
+                      "dav_calendar_handler: ap_pass_brigade returned %i",
+                      status);
+    }
+
+    /* the response has been sent. */
+    return NULL;
 }
 
 static int dav_calendar_find_ns(const apr_array_header_t *namespaces, const char *uri)
@@ -3326,95 +3687,6 @@ static int dav_calendar_post_config(apr_pool_t *p, apr_pool_t *plog,
     iM_MKCALENDAR = ap_method_register(p, "MKCALENDAR");
 
     return OK;
-}
-
-static dav_error * dav_calendar_etag_walker(dav_walk_resource *wres, int calltype)
-{
-    dav_calendar_ctx *cctx = wres->walk_ctx;
-    const char *etag;
-
-    /* avoid loops */
-    if (calltype != DAV_CALLTYPE_MEMBER) {
-        return NULL;
-    }
-
-    etag = (*wres->resource->hooks->getetag)(wres->resource);
-
-    if (etag) {
-        if (cctx->sha1) {
-            apr_sha1_update(cctx->sha1, etag, strlen(etag));
-        }
-    }
-    else {
-        cctx->sha1 = NULL;
-    }
-
-    return NULL;
-}
-
-static dav_error * dav_calendar_get_walker(dav_walk_resource *wres, int calltype)
-{
-    request_rec *r = wres->resource->hooks->get_request_rec(wres->resource);
-
-    dav_calendar_ctx *cctx = wres->walk_ctx;
-    dav_error *err;
-
-    /* avoid loops */
-    if (calltype != DAV_CALLTYPE_MEMBER) {
-        return NULL;
-    }
-
-    err = cctx->err = NULL;
-
-    /* check for any method preconditions */
-    if (dav_run_method_precondition(cctx->r, NULL, wres->resource, NULL, &err) != DECLINED
-            && err) {
-        dav_log_err(r, err, APLOG_DEBUG);
-        return NULL;
-    }
-
-    /* we have to "deliver" the stream into an output filter */
-    if (!wres->resource->hooks->handle_get) {
-        int status;
-
-        request_rec *rr = ap_sub_req_method_uri("GET", wres->resource->uri, r,
-                dav_calendar_create_parse_icalendar_filter(r, cctx));
-
-        status = ap_run_sub_req(rr);
-        if (status != OK) {
-
-            err = dav_push_error(rr->pool, status, 0,
-                    "Unable to read calendar.",
-                    cctx->err);
-
-        }
-        ap_destroy_sub_req(rr);
-
-    }
-
-    /* mod_dav delivers the body */
-    else if ((err = (*wres->resource->hooks->deliver)(wres->resource,
-            dav_calendar_create_parse_icalendar_filter(r, cctx))) != NULL) {
-
-        err = dav_push_error(r->pool, 0, 0,
-                "Unable to read calendar.", err);
-
-    }
-
-    /* how did the parsing go? */
-    if (!cctx->comp) {
-
-        err = dav_push_error(r->pool, 0, 0,
-                "Unable to parse calendar.",
-                cctx->err);
-
-    }
-
-    if (err) {
-        dav_log_err(r, err, APLOG_DEBUG);
-    }
-
-    return NULL;
 }
 
 static int dav_calendar_handle_get(request_rec *r)
