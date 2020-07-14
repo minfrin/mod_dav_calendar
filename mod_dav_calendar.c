@@ -337,8 +337,8 @@ typedef struct dav_calendar_ctx {
 
 static apr_status_t icalparser_cleanup(void *data)
 {
-	icalparser *comp = data;
-	icalparser_free(comp);
+    icalparser *comp = data;
+    icalparser_free(comp);
     return APR_SUCCESS;
 }
 
@@ -351,51 +351,51 @@ static apr_status_t icalcomponent_cleanup(void *data)
 
 static char dav_calendar_ascii_toupper(char c)
 {
-	/* ascii only, ignore locale */
-	return c < 0 ? c : c | ' ';
+    /* ascii only, ignore locale */
+    return c < 0 ? c : c | ' ';
 }
 
 static int dav_calendar_text_match_ascii_casecmp(const char *match,
-		const char *text)
+        const char *text)
 {
-	/* https://tools.ietf.org/html/rfc4790#section-9.2 */
+    /* https://tools.ietf.org/html/rfc4790#section-9.2 */
 
-	while (*text) {
-		const char *smatch = match;
-		const char *stext = text;
+    while (*text) {
+        const char *smatch = match;
+        const char *stext = text;
 
-		while (*stext
-				&& dav_calendar_ascii_toupper(*smatch)
-						!= dav_calendar_ascii_toupper(*stext)) {
-			stext++;
-		}
+        while (*stext
+                && dav_calendar_ascii_toupper(*smatch)
+                        != dav_calendar_ascii_toupper(*stext)) {
+            stext++;
+        }
 
-		while (*stext && *smatch
-				&& dav_calendar_ascii_toupper(*smatch)
-						== dav_calendar_ascii_toupper(*stext)) {
-			stext++;
-			smatch++;
-		}
+        while (*stext && *smatch
+                && dav_calendar_ascii_toupper(*smatch)
+                        == dav_calendar_ascii_toupper(*stext)) {
+            stext++;
+            smatch++;
+        }
 
-		if (*smatch == 0) {
-			return 1;
-		}
+        if (*smatch == 0) {
+            return 1;
+        }
 
-		text++;
-	}
+        text++;
+    }
 
-	return 0;
+    return 0;
 }
 
 static int dav_calendar_text_match_octet(const char *match, const char *text)
 {
-	/* https://tools.ietf.org/html/rfc4790#section-9.3 */
+    /* https://tools.ietf.org/html/rfc4790#section-9.3 */
 
-	/*
-	 * The ordering algorithm is as follows:
-	 *
-	 * 1.  If both strings are the empty string, return the result "equal".
-	 *
+    /*
+     * The ordering algorithm is as follows:
+     *
+     * 1.  If both strings are the empty string, return the result "equal".
+     *
      * 2.  If the first string is empty and the second is not, return the
      *     result "less".
      *
@@ -419,863 +419,863 @@ static int dav_calendar_text_match_octet(const char *match, const char *text)
      * length equal to the length of the first string, which would result in
      * a "match" result from the equality function.  Otherwise, the
      * substring operation returns "no-match".
-	 */
+     */
 
-	if (strstr(text, match)) {
-		return 1;
-	}
+    if (strstr(text, match)) {
+        return 1;
+    }
 
-	return 0;
+    return 0;
 }
 
 static dav_error *dav_calendar_text_match(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, const apr_xml_elem *text_match,
-		const char *text)
+        const apr_xml_elem *timezone, const apr_xml_elem *text_match,
+        const char *text)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_attr *collation, *negate_condition;
+    const apr_xml_attr *collation, *negate_condition;
 
-	const char *match;
-	int negate;
+    const char *match;
+    int negate;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	/*
-	 * <!ELEMENT text-match (#PCDATA)>
+    /*
+     * <!ELEMENT text-match (#PCDATA)>
      *   PCDATA value: string
      *
      * <!ATTLIST text-match collation        CDATA "i;ascii-casemap"
      *                      negate-condition (yes | no) "no">
-	 */
+     */
 
-	match = dav_xml_get_cdata(text_match, ctx->r->pool, 1 /* strip_white */);
+    match = dav_xml_get_cdata(text_match, ctx->r->pool, 1 /* strip_white */);
 
-	negate_condition = dav_find_attr_ns(text_match, APR_XML_NS_NONE,
-			"negate-condition");
-	if (!negate_condition || !negate_condition->value
-			|| !strcmp(negate_condition->value,
-					"no")) {
-		negate = 0;
-	}
-	else if (!strcmp(negate_condition->value,
-			"yes")) {
-		negate = 1;
-	}
-	else {
+    negate_condition = dav_find_attr_ns(text_match, APR_XML_NS_NONE,
+            "negate-condition");
+    if (!negate_condition || !negate_condition->value
+            || !strcmp(negate_condition->value,
+                    "no")) {
+        negate = 0;
+    }
+    else if (!strcmp(negate_condition->value,
+            "yes")) {
+        negate = 1;
+    }
+    else {
 
-		/* MUST violation */
-		err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-				APR_SUCCESS,
-				"Negate-condition attribute must contain "
-				"yes or no.");
-		err->tagname = "CALDAV:valid-filter";
+        /* MUST violation */
+        err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                APR_SUCCESS,
+                "Negate-condition attribute must contain "
+                "yes or no.");
+        err->tagname = "CALDAV:valid-filter";
 
-		return err;
-	}
+        return err;
+    }
 
-	collation = dav_find_attr_ns(text_match, APR_XML_NS_NONE, "collation");
-	if (collation) {
+    collation = dav_find_attr_ns(text_match, APR_XML_NS_NONE, "collation");
+    if (collation) {
 
-		if (!collation || !collation->value
-				|| !strcmp(collation->value,
-				DAV_CALENDAR_COLLATION_ASCII_CASEMAP)) {
+        if (!collation || !collation->value
+                || !strcmp(collation->value,
+                DAV_CALENDAR_COLLATION_ASCII_CASEMAP)) {
 
-			if (dav_calendar_text_match_ascii_casecmp(match, text)) {
+            if (dav_calendar_text_match_ascii_casecmp(match, text)) {
 
-				if (!negate) {
+                if (!negate) {
 
-			    	/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
-			else {
+            }
+            else {
 
-				if (negate) {
+                if (negate) {
 
-			    	/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
+            }
 
-		}
-		else if (!strcmp(collation->value,
-				DAV_CALENDAR_COLLATION_OCTET)) {
+        }
+        else if (!strcmp(collation->value,
+                DAV_CALENDAR_COLLATION_OCTET)) {
 
-			if (dav_calendar_text_match_octet(match, text)) {
+            if (dav_calendar_text_match_octet(match, text)) {
 
-				if (!negate) {
+                if (!negate) {
 
-			    	/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
-			else {
+            }
+            else {
 
-				if (negate) {
+                if (negate) {
 
-			    	/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
+            }
 
-		}
-		else {
+        }
+        else {
 
-			/* MUST violation */
-			err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-					APR_SUCCESS,
-					"Collation attribute must contain "
-					DAV_CALENDAR_COLLATION_ASCII_CASEMAP " or "
-					DAV_CALENDAR_COLLATION_OCTET ".");
-			err->tagname = "CALDAV:supported-collation";
+            /* MUST violation */
+            err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                    APR_SUCCESS,
+                    "Collation attribute must contain "
+                    DAV_CALENDAR_COLLATION_ASCII_CASEMAP " or "
+                    DAV_CALENDAR_COLLATION_OCTET ".");
+            err->tagname = "CALDAV:supported-collation";
 
-			return err;
-		}
-	}
+            return err;
+        }
+    }
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_time_range(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, const apr_xml_elem *time_range,
-		icaltimetype **stt, icaltimetype **ett)
+        const apr_xml_elem *timezone, const apr_xml_elem *time_range,
+        icaltimetype **stt, icaltimetype **ett)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_attr *start, *end;
+    const apr_xml_attr *start, *end;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	/*
-	 * <!ELEMENT time-range EMPTY>
+    /*
+     * <!ELEMENT time-range EMPTY>
      *
      * <!ATTLIST time-range start CDATA #IMPLIED
      *                      end   CDATA #IMPLIED>
      * start value: an iCalendar "date with UTC time"
      * end value: an iCalendar "date with UTC time"
-	 */
+     */
 
-	*stt = apr_palloc(ctx->r->pool, sizeof(icaltimetype));
+    *stt = apr_palloc(ctx->r->pool, sizeof(icaltimetype));
 
-	start = dav_find_attr_ns(time_range, APR_XML_NS_NONE, "start");
-	if (!start) {
-		**stt = icaltime_from_string("00000101000000Z");
-	}
-	else {
-		**stt = icaltime_from_string(start->value);
-		if (icalerrno != ICAL_NO_ERROR) {
-			err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-					APR_EGENERAL, icalerror_perror());
-			err->tagname = "CALDAV:valid-filter";
-			return err;
-		}
-	}
+    start = dav_find_attr_ns(time_range, APR_XML_NS_NONE, "start");
+    if (!start) {
+        **stt = icaltime_from_string("00000101000000Z");
+    }
+    else {
+        **stt = icaltime_from_string(start->value);
+        if (icalerrno != ICAL_NO_ERROR) {
+            err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                    APR_EGENERAL, icalerror_perror());
+            err->tagname = "CALDAV:valid-filter";
+            return err;
+        }
+    }
 
-	*ett = apr_palloc(ctx->r->pool, sizeof(icaltimetype));
+    *ett = apr_palloc(ctx->r->pool, sizeof(icaltimetype));
 
-	end = dav_find_attr_ns(time_range, APR_XML_NS_NONE, "end");
-	if (!end) {
-		**ett = icaltime_from_string("99991231235959Z");
-	}
-	else {
-		**ett = icaltime_from_string(end->value);
-		if (icalerrno != ICAL_NO_ERROR) {
-			err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-					APR_EGENERAL, icalerror_perror());
-			err->tagname = "CALDAV:valid-filter";
-			return err;
-		}
-	}
+    end = dav_find_attr_ns(time_range, APR_XML_NS_NONE, "end");
+    if (!end) {
+        **ett = icaltime_from_string("99991231235959Z");
+    }
+    else {
+        **ett = icaltime_from_string(end->value);
+        if (icalerrno != ICAL_NO_ERROR) {
+            err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                    APR_EGENERAL, icalerror_perror());
+            err->tagname = "CALDAV:valid-filter";
+            return err;
+        }
+    }
 
-	if (!start && !end) {
-		/* MUST violation */
-		err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-				APR_SUCCESS,
-				"Start and/or end attribute must exist in time-range");
-		err->tagname = "CALDAV:valid-filter";
-		return err;
-	}
+    if (!start && !end) {
+        /* MUST violation */
+        err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                APR_SUCCESS,
+                "Start and/or end attribute must exist in time-range");
+        err->tagname = "CALDAV:valid-filter";
+        return err;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_prop_time_range(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, icalcomponent *comp, icalproperty *prop,
-		icaltimetype *stt, icaltimetype *ett)
+        const apr_xml_elem *timezone, icalcomponent *comp, icalproperty *prop,
+        icaltimetype *stt, icaltimetype *ett)
 {
 
-	icaltimetype time;
-	icaltime_span test;
-	icaltime_span span;
+    icaltimetype time;
+    icaltime_span test;
+    icaltime_span span;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	switch (icalproperty_isa(prop)) {
-	case ICAL_DTEND_PROPERTY:
+    switch (icalproperty_isa(prop)) {
+    case ICAL_DTEND_PROPERTY:
 
-		time = icalcomponent_get_dtend(comp);
+        time = icalcomponent_get_dtend(comp);
 
-		break;
-	case ICAL_DUE_PROPERTY:
+        break;
+    case ICAL_DUE_PROPERTY:
 
-		time = icalcomponent_get_due(comp);
+        time = icalcomponent_get_due(comp);
 
-		break;
-	case ICAL_DTSTART_PROPERTY:
+        break;
+    case ICAL_DTSTART_PROPERTY:
 
         time = icalcomponent_get_dtstart(comp);
 
         break;
 
-	case ICAL_DTSTAMP_PROPERTY:
+    case ICAL_DTSTAMP_PROPERTY:
         time = icalcomponent_get_dtstamp(comp);
 
         break;
-	case ICAL_COMPLETED_PROPERTY:
-	case ICAL_CREATED_PROPERTY:
-	case ICAL_LASTMODIFIED_PROPERTY:
+    case ICAL_COMPLETED_PROPERTY:
+    case ICAL_CREATED_PROPERTY:
+    case ICAL_LASTMODIFIED_PROPERTY:
 
-		time = icalproperty_get_datetime_with_component(prop, comp);
+        time = icalproperty_get_datetime_with_component(prop, comp);
 
-		break;
-	default:
+        break;
+    default:
         time = icaltime_null_time();
-	}
+    }
 
     test = icaltime_span_new(time, time, 0);
     span = icaltime_span_new(*stt, *ett, 0);
 
     if (icalproperty_recurrence_is_excluded(comp, &time, &time) ||
-    		icaltime_span_overlaps(&test, &span)) {
+            icaltime_span_overlaps(&test, &span)) {
 
-    	/* we have a match! */
-		ctx->match = 1;
+        /* we have a match! */
+        ctx->match = 1;
 
     }
 
-	return NULL;
+    return NULL;
 }
 
 static void dav_calendar_alarm_callback(icalcomponent *comp,
-		struct icaltime_span *span, void *data)
+        struct icaltime_span *span, void *data)
 {
-	dav_calendar_ctx *ctx = data;
+    dav_calendar_ctx *ctx = data;
 
-	/* we have a match! */
-	ctx->match = 1;
+    /* we have a match! */
+    ctx->match = 1;
 
 }
 
 static void dav_calendar_event_callback(icalcomponent *comp,
-		struct icaltime_span *span, void *data)
+        struct icaltime_span *span, void *data)
 {
-	dav_calendar_ctx *ctx = data;
+    dav_calendar_ctx *ctx = data;
 
-	/* we have a match! */
-	ctx->match = 1;
+    /* we have a match! */
+    ctx->match = 1;
 
 }
 
 static dav_error *dav_calendar_comp_time_range(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone,
-		icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
+        const apr_xml_elem *timezone,
+        icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
 {
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	switch (icalcomponent_isa(comp)) {
+    switch (icalcomponent_isa(comp)) {
 
-	case ICAL_VEVENT_COMPONENT: {
+    case ICAL_VEVENT_COMPONENT: {
 
-		/*
-		 * A VEVENT component overlaps a given time range if the condition
-		 * for the corresponding component state specified in the table below
-		 * is satisfied.  Note that, as specified in [RFC2445], the DTSTART
-		 * property is REQUIRED in the VEVENT component.  The conditions
-		 * depend on the presence of the DTEND and DURATION properties in the
-		 * VEVENT component.  Furthermore, the value of the DTEND property
-		 *
-		 * MUST be later in time than the value of the DTSTART property.  The
-		 * duration of a VEVENT component with no DTEND and DURATION
-		 * properties is 1 day (+P1D) when the DTSTART is a DATE value, and 0
-		 * seconds when the DTSTART is a DATE-TIME value.
-		 *
-		 * +---------------------------------------------------------------+
-		 * | VEVENT has the DTEND property?                                |
-		 * |   +-----------------------------------------------------------+
-		 * |   | VEVENT has the DURATION property?                         |
-		 * |   |   +-------------------------------------------------------+
-		 * |   |   | DURATION property value is greater than 0 seconds?    |
-		 * |   |   |   +---------------------------------------------------+
-		 * |   |   |   | DTSTART property is a DATE-TIME value?            |
-		 * |   |   |   |   +-----------------------------------------------+
-		 * |   |   |   |   | Condition to evaluate                         |
-		 * +---+---+---+---+-----------------------------------------------+
-		 * | Y | N | N | * | (start <  DTEND AND end > DTSTART)            |
-		 * +---+---+---+---+-----------------------------------------------+
-		 * | N | Y | Y | * | (start <  DTSTART+DURATION AND end > DTSTART) |
-		 * |   |   +---+---+-----------------------------------------------+
-		 * |   |   | N | * | (start <= DTSTART AND end > DTSTART)          |
-		 * +---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | Y | (start <= DTSTART AND end > DTSTART)          |
-		 * +---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | N | (start <  DTSTART+P1D AND end > DTSTART)      |
-		 * +---+---+---+---+-----------------------------------------------+
-		 */
+        /*
+         * A VEVENT component overlaps a given time range if the condition
+         * for the corresponding component state specified in the table below
+         * is satisfied.  Note that, as specified in [RFC2445], the DTSTART
+         * property is REQUIRED in the VEVENT component.  The conditions
+         * depend on the presence of the DTEND and DURATION properties in the
+         * VEVENT component.  Furthermore, the value of the DTEND property
+         *
+         * MUST be later in time than the value of the DTSTART property.  The
+         * duration of a VEVENT component with no DTEND and DURATION
+         * properties is 1 day (+P1D) when the DTSTART is a DATE value, and 0
+         * seconds when the DTSTART is a DATE-TIME value.
+         *
+         * +---------------------------------------------------------------+
+         * | VEVENT has the DTEND property?                                |
+         * |   +-----------------------------------------------------------+
+         * |   | VEVENT has the DURATION property?                         |
+         * |   |   +-------------------------------------------------------+
+         * |   |   | DURATION property value is greater than 0 seconds?    |
+         * |   |   |   +---------------------------------------------------+
+         * |   |   |   | DTSTART property is a DATE-TIME value?            |
+         * |   |   |   |   +-----------------------------------------------+
+         * |   |   |   |   | Condition to evaluate                         |
+         * +---+---+---+---+-----------------------------------------------+
+         * | Y | N | N | * | (start <  DTEND AND end > DTSTART)            |
+         * +---+---+---+---+-----------------------------------------------+
+         * | N | Y | Y | * | (start <  DTSTART+DURATION AND end > DTSTART) |
+         * |   |   +---+---+-----------------------------------------------+
+         * |   |   | N | * | (start <= DTSTART AND end > DTSTART)          |
+         * +---+---+---+---+-----------------------------------------------+
+         * | N | N | N | Y | (start <= DTSTART AND end > DTSTART)          |
+         * +---+---+---+---+-----------------------------------------------+
+         * | N | N | N | N | (start <  DTSTART+P1D AND end > DTSTART)      |
+         * +---+---+---+---+-----------------------------------------------+
+         */
 
-		icalcomponent_foreach_recurrence(comp, *stt, *ett,
-				dav_calendar_event_callback, ctx);
+        icalcomponent_foreach_recurrence(comp, *stt, *ett,
+                dav_calendar_event_callback, ctx);
 
-		break;
-	}
-	case ICAL_VTODO_COMPONENT: {
+        break;
+    }
+    case ICAL_VTODO_COMPONENT: {
 
-		/*
-		 * A VTODO component is said to overlap a given time range if the
-		 * condition for the corresponding component state specified in the
-		 * table below is satisfied.  The conditions depend on the presence
-		 * of the DTSTART, DURATION, DUE, COMPLETED, and CREATED properties
-		 * in the VTODO component.  Note that, as specified in [RFC2445], the
-		 * DUE value MUST be a DATE-TIME value equal to or after the DTSTART
-		 * value if specified.
-		 *
-		 * +-------------------------------------------------------------------+
-		 * | VTODO has the DTSTART property?                                   |
-		 * |   +---------------------------------------------------------------+
-		 * |   |   VTODO has the DURATION property?                            |
-		 * |   |   +-----------------------------------------------------------+
-		 * |   |   | VTODO has the DUE property?                               |
-		 * |   |   |   +-------------------------------------------------------+
-		 * |   |   |   | VTODO has the COMPLETED property?                     |
-		 * |   |   |   |   +---------------------------------------------------+
-		 * |   |   |   |   | VTODO has the CREATED property?                   |
-		 * |   |   |   |   |   +-----------------------------------------------+
-		 * |   |   |   |   |   | Condition to evaluate                         |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | Y | Y | N | * | * | (start  <= DTSTART+DURATION)  AND             |
-		 * |   |   |   |   |   | ((end   >  DTSTART)  OR                       |
-		 * |   |   |   |   |   |  (end   >= DTSTART+DURATION))                 |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | Y | N | Y | * | * | ((start <  DUE)      OR  (start <= DTSTART))  |
-		 * |   |   |   |   |   | AND                                           |
-		 * |   |   |   |   |   | ((end   >  DTSTART)  OR  (end   >= DUE))      |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | Y | N | N | * | * | (start  <= DTSTART)  AND (end >  DTSTART)     |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | N | N | Y | * | * | (start  <  DUE)      AND (end >= DUE)         |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | Y | Y | ((start <= CREATED)  OR  (start <= COMPLETED))|
-		 * |   |   |   |   |   | AND                                           |
-		 * |   |   |   |   |   | ((end   >= CREATED)  OR  (end   >= COMPLETED))|
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | Y | N | (start  <= COMPLETED) AND (end  >= COMPLETED) |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | N | Y | (end    >  CREATED)                           |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 * | N | N | N | N | N | TRUE                                          |
-		 * +---+---+---+---+---+-----------------------------------------------+
-		 */
+        /*
+         * A VTODO component is said to overlap a given time range if the
+         * condition for the corresponding component state specified in the
+         * table below is satisfied.  The conditions depend on the presence
+         * of the DTSTART, DURATION, DUE, COMPLETED, and CREATED properties
+         * in the VTODO component.  Note that, as specified in [RFC2445], the
+         * DUE value MUST be a DATE-TIME value equal to or after the DTSTART
+         * value if specified.
+         *
+         * +-------------------------------------------------------------------+
+         * | VTODO has the DTSTART property?                                   |
+         * |   +---------------------------------------------------------------+
+         * |   |   VTODO has the DURATION property?                            |
+         * |   |   +-----------------------------------------------------------+
+         * |   |   | VTODO has the DUE property?                               |
+         * |   |   |   +-------------------------------------------------------+
+         * |   |   |   | VTODO has the COMPLETED property?                     |
+         * |   |   |   |   +---------------------------------------------------+
+         * |   |   |   |   | VTODO has the CREATED property?                   |
+         * |   |   |   |   |   +-----------------------------------------------+
+         * |   |   |   |   |   | Condition to evaluate                         |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | Y | Y | N | * | * | (start  <= DTSTART+DURATION)  AND             |
+         * |   |   |   |   |   | ((end   >  DTSTART)  OR                       |
+         * |   |   |   |   |   |  (end   >= DTSTART+DURATION))                 |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | Y | N | Y | * | * | ((start <  DUE)      OR  (start <= DTSTART))  |
+         * |   |   |   |   |   | AND                                           |
+         * |   |   |   |   |   | ((end   >  DTSTART)  OR  (end   >= DUE))      |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | Y | N | N | * | * | (start  <= DTSTART)  AND (end >  DTSTART)     |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | N | N | Y | * | * | (start  <  DUE)      AND (end >= DUE)         |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | N | N | N | Y | Y | ((start <= CREATED)  OR  (start <= COMPLETED))|
+         * |   |   |   |   |   | AND                                           |
+         * |   |   |   |   |   | ((end   >= CREATED)  OR  (end   >= COMPLETED))|
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | N | N | N | Y | N | (start  <= COMPLETED) AND (end  >= COMPLETED) |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | N | N | N | N | Y | (end    >  CREATED)                           |
+         * +---+---+---+---+---+-----------------------------------------------+
+         * | N | N | N | N | N | TRUE                                          |
+         * +---+---+---+---+---+-----------------------------------------------+
+         */
 
-		icalcomponent_foreach_recurrence(comp, *stt, *ett,
-				dav_calendar_event_callback, ctx);
+        icalcomponent_foreach_recurrence(comp, *stt, *ett,
+                dav_calendar_event_callback, ctx);
 
-		break;
-	}
-	case ICAL_VJOURNAL_COMPONENT: {
+        break;
+    }
+    case ICAL_VJOURNAL_COMPONENT: {
 
-		/*
-		 * A VJOURNAL component overlaps a given time range if the condition
-		 * for the corresponding component state specified in the table below
-		 * is satisfied.  The conditions depend on the presence of the
-		 * DTSTART property in the VJOURNAL component and on whether the
-		 * DTSTART is a DATE-TIME or DATE value.  The effective "duration" of
-		 * a VJOURNAL component is 1 day (+P1D) when the DTSTART is a DATE
-		 * value, and 0 seconds when the DTSTART is a DATE-TIME value.
-		 *
-		 * +----------------------------------------------------+
-		 * | VJOURNAL has the DTSTART property?                 |
-		 * |   +------------------------------------------------+
-		 * |   | DTSTART property is a DATE-TIME value?         |
-		 * |   |   +--------------------------------------------+
-		 * |   |   | Condition to evaluate                      |
-		 * +---+---+--------------------------------------------+
-		 * | Y | Y | (start <= DTSTART)     AND (end > DTSTART) |
-		 * +---+---+--------------------------------------------+
-		 * | Y | N | (start <  DTSTART+P1D) AND (end > DTSTART) |
-		 * +---+---+--------------------------------------------+
-		 * | N | * | FALSE                                      |
-		 * +---+---+--------------------------------------------+
-		 */
-		icaltime_span span = icalcomponent_get_span(comp);
-		icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
+        /*
+         * A VJOURNAL component overlaps a given time range if the condition
+         * for the corresponding component state specified in the table below
+         * is satisfied.  The conditions depend on the presence of the
+         * DTSTART property in the VJOURNAL component and on whether the
+         * DTSTART is a DATE-TIME or DATE value.  The effective "duration" of
+         * a VJOURNAL component is 1 day (+P1D) when the DTSTART is a DATE
+         * value, and 0 seconds when the DTSTART is a DATE-TIME value.
+         *
+         * +----------------------------------------------------+
+         * | VJOURNAL has the DTSTART property?                 |
+         * |   +------------------------------------------------+
+         * |   | DTSTART property is a DATE-TIME value?         |
+         * |   |   +--------------------------------------------+
+         * |   |   | Condition to evaluate                      |
+         * +---+---+--------------------------------------------+
+         * | Y | Y | (start <= DTSTART)     AND (end > DTSTART) |
+         * +---+---+--------------------------------------------+
+         * | Y | N | (start <  DTSTART+P1D) AND (end > DTSTART) |
+         * +---+---+--------------------------------------------+
+         * | N | * | FALSE                                      |
+         * +---+---+--------------------------------------------+
+         */
+        icaltime_span span = icalcomponent_get_span(comp);
+        icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
 
-		if (icaltime_span_overlaps(&span, &limit)) {
+        if (icaltime_span_overlaps(&span, &limit)) {
 
-			/* we have a match! */
-			ctx->match = 1;
+            /* we have a match! */
+            ctx->match = 1;
 
-		}
+        }
 
-		break;
-	}
-	case ICAL_VFREEBUSY_COMPONENT: {
+        break;
+    }
+    case ICAL_VFREEBUSY_COMPONENT: {
 
-		/*
-		 * A VFREEBUSY component overlaps a given time range if the condition
-		 * for the corresponding component state specified in the table below
-		 * is satisfied.  The conditions depend on the presence in the
-		 * VFREEBUSY component of the DTSTART and DTEND properties, and any
-		 * FREEBUSY properties in the absence of DTSTART and DTEND.  Any
-		 * DURATION property is ignored, as it has a special meaning when
-		 * used in a VFREEBUSY component.
-		 *
-		 * When only FREEBUSY properties are used, each period in each
-		 * FREEBUSY property is compared against the time range, irrespective
-		 * of the type of free busy information (free, busy, busy-tentative,
-		 * busy-unavailable) represented by the property.
-		 *
-		 *
-		 * +------------------------------------------------------+
-		 * | VFREEBUSY has both the DTSTART and DTEND properties? |
-		 * |   +--------------------------------------------------+
-		 * |   | VFREEBUSY has the FREEBUSY property?             |
-		 * |   |   +----------------------------------------------+
-		 * |   |   | Condition to evaluate                        |
-		 * +---+---+----------------------------------------------+
-		 * | Y | * | (start <= DTEND) AND (end > DTSTART)         |
-		 * +---+---+----------------------------------------------+
-		 * | N | Y | (start <  freebusy-period-end) AND           |
-		 * |   |   | (end   >  freebusy-period-start)             |
-		 * +---+---+----------------------------------------------+
-		 * | N | N | FALSE                                        |
-		 * +---+---+----------------------------------------------+
-		 */
-		icaltime_span span = icalcomponent_get_span(comp);
-		icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
+        /*
+         * A VFREEBUSY component overlaps a given time range if the condition
+         * for the corresponding component state specified in the table below
+         * is satisfied.  The conditions depend on the presence in the
+         * VFREEBUSY component of the DTSTART and DTEND properties, and any
+         * FREEBUSY properties in the absence of DTSTART and DTEND.  Any
+         * DURATION property is ignored, as it has a special meaning when
+         * used in a VFREEBUSY component.
+         *
+         * When only FREEBUSY properties are used, each period in each
+         * FREEBUSY property is compared against the time range, irrespective
+         * of the type of free busy information (free, busy, busy-tentative,
+         * busy-unavailable) represented by the property.
+         *
+         *
+         * +------------------------------------------------------+
+         * | VFREEBUSY has both the DTSTART and DTEND properties? |
+         * |   +--------------------------------------------------+
+         * |   | VFREEBUSY has the FREEBUSY property?             |
+         * |   |   +----------------------------------------------+
+         * |   |   | Condition to evaluate                        |
+         * +---+---+----------------------------------------------+
+         * | Y | * | (start <= DTEND) AND (end > DTSTART)         |
+         * +---+---+----------------------------------------------+
+         * | N | Y | (start <  freebusy-period-end) AND           |
+         * |   |   | (end   >  freebusy-period-start)             |
+         * +---+---+----------------------------------------------+
+         * | N | N | FALSE                                        |
+         * +---+---+----------------------------------------------+
+         */
+        icaltime_span span = icalcomponent_get_span(comp);
+        icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
 
-		if (icaltime_span_overlaps(&span, &limit)) {
+        if (icaltime_span_overlaps(&span, &limit)) {
 
-			/* we have a match! */
-			ctx->match = 1;
+            /* we have a match! */
+            ctx->match = 1;
 
-		}
+        }
 
-		break;
-	}
-	case ICAL_VALARM_COMPONENT: {
+        break;
+    }
+    case ICAL_VALARM_COMPONENT: {
 
-		/*
-		 * A VALARM component is said to overlap a given time range if the
-		 * following condition holds:
-		 *
-		 *    (start <= trigger-time) AND (end > trigger-time)
-		 *
-		 * A VALARM component can be defined such that it triggers repeatedly.
-		 * Such a VALARM component is said to overlap a given time range if at
-		 * least one of its triggers overlaps the time range.
-		 */
-		icalproperty *prop;
-		struct icaltriggertype tr;
-		struct icaldurationtype duration = icaldurationtype_null_duration();
-		int repeat = 1;
+        /*
+         * A VALARM component is said to overlap a given time range if the
+         * following condition holds:
+         *
+         *    (start <= trigger-time) AND (end > trigger-time)
+         *
+         * A VALARM component can be defined such that it triggers repeatedly.
+         * Such a VALARM component is said to overlap a given time range if at
+         * least one of its triggers overlaps the time range.
+         */
+        icalproperty *prop;
+        struct icaltriggertype tr;
+        struct icaldurationtype duration = icaldurationtype_null_duration();
+        int repeat = 1;
 
-		if ((prop = icalcomponent_get_first_property(comp,
-				ICAL_TRIGGER_PROPERTY))) {
+        if ((prop = icalcomponent_get_first_property(comp,
+                ICAL_TRIGGER_PROPERTY))) {
 
-			tr = icalproperty_get_trigger(prop);;
+            tr = icalproperty_get_trigger(prop);;
 
-			if (!icaltime_is_null_time(tr.time)) {
+            if (!icaltime_is_null_time(tr.time)) {
 
-				/* simple time value - direct comparison */
+                /* simple time value - direct comparison */
 
-        		icaltime_span span = icaltime_span_new(tr.time, tr.time, 1);
-        		icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
+                icaltime_span span = icaltime_span_new(tr.time, tr.time, 1);
+                icaltime_span limit = icaltime_span_new(*stt, *ett, 1);
 
-        		if (icaltime_span_overlaps(&span, &limit)) {
+                if (icaltime_span_overlaps(&span, &limit)) {
 
-        			/* we have a match! */
-        			ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-        		}
+                }
 
 
-			}
-			else {
+            }
+            else {
 
-				/* this is fun - relative to the parent then */
+                /* this is fun - relative to the parent then */
 
-				icaltimetype st = *stt;
-				icaltimetype et = *ett;
+                icaltimetype st = *stt;
+                icaltimetype et = *ett;
 
-	            if ((prop = icalcomponent_get_first_property(comp,
-						ICAL_DURATION_PROPERTY))) {
-					duration = icalproperty_get_duration(prop);
-				}
+                if ((prop = icalcomponent_get_first_property(comp,
+                        ICAL_DURATION_PROPERTY))) {
+                    duration = icalproperty_get_duration(prop);
+                }
 
-				if ((prop = icalcomponent_get_first_property(comp,
-						ICAL_REPEAT_PROPERTY))) {
-					repeat = icalproperty_get_repeat(prop) + 1;
-				}
+                if ((prop = icalcomponent_get_first_property(comp,
+                        ICAL_REPEAT_PROPERTY))) {
+                    repeat = icalproperty_get_repeat(prop) + 1;
+                }
 
-				icaltime_adjust(&st, 0, 0, 0,
-						icaldurationtype_as_int(duration) * repeat);
-				icaltime_adjust(&et, 0, 0, 0,
-						icaldurationtype_as_int(duration) * repeat);
+                icaltime_adjust(&st, 0, 0, 0,
+                        icaldurationtype_as_int(duration) * repeat);
+                icaltime_adjust(&et, 0, 0, 0,
+                        icaldurationtype_as_int(duration) * repeat);
 
-				icalcomponent_foreach_recurrence(icalcomponent_get_parent(comp),
-						st, et, dav_calendar_alarm_callback, ctx);
+                icalcomponent_foreach_recurrence(icalcomponent_get_parent(comp),
+                        st, et, dav_calendar_alarm_callback, ctx);
 
-			}
+            }
 
-		}
+        }
 
-		break;
-	}
-	default:
-		break;
-	}
+        break;
+    }
+    default:
+        break;
+    }
 
-	/*
-	 * The calendar properties COMPLETED, CREATED, DTEND, DTSTAMP,
-	 * DTSTART, DUE, and LAST-MODIFIED overlap a given time range if the
-	 * following condition holds:
-	 *
-	 *     (start <= date-time) AND (end > date-time)
-	 *
-	 * Note that if DTEND is not present in a VEVENT, but DURATION is, then
-	 * the test should instead operate on the 'effective' DTEND, i.e.,
-	 * DTSTART+DURATION.  Similarly, if DUE is not present in a VTODO, but
-	 * DTSTART and DURATION are, then the test should instead operate on the
-	 * 'effective' DUE, i.e., DTSTART+DURATION.
-	 *
-	 * The semantic of CALDAV:time-range is not defined for any other
-	 * calendar components and properties.
-	 */
+    /*
+     * The calendar properties COMPLETED, CREATED, DTEND, DTSTAMP,
+     * DTSTART, DUE, and LAST-MODIFIED overlap a given time range if the
+     * following condition holds:
+     *
+     *     (start <= date-time) AND (end > date-time)
+     *
+     * Note that if DTEND is not present in a VEVENT, but DURATION is, then
+     * the test should instead operate on the 'effective' DTEND, i.e.,
+     * DTSTART+DURATION.  Similarly, if DUE is not present in a VTODO, but
+     * DTSTART and DURATION are, then the test should instead operate on the
+     * 'effective' DUE, i.e., DTSTART+DURATION.
+     *
+     * The semantic of CALDAV:time-range is not defined for any other
+     * calendar components and properties.
+     */
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, const apr_xml_elem *param_filter,
-		icalproperty *prop, icalparameter *param, icaltimetype *stt,
-		icaltimetype *ett)
+        const apr_xml_elem *timezone, const apr_xml_elem *param_filter,
+        icalproperty *prop, icalparameter *param, icaltimetype *stt,
+        icaltimetype *ett)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_elem *is_not_defined = NULL;
-	const apr_xml_elem *text_match = NULL;
-	const apr_xml_elem *elem = NULL;
-	const apr_xml_attr *name;
+    const apr_xml_elem *is_not_defined = NULL;
+    const apr_xml_elem *text_match = NULL;
+    const apr_xml_elem *elem = NULL;
+    const apr_xml_attr *name;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	/*
-	 * <!ELEMENT param-filter (is-not-defined | text-match?)>
+    /*
+     * <!ELEMENT param-filter (is-not-defined | text-match?)>
      *
      * <!ATTLIST param-filter name CDATA #REQUIRED>
      * name value: a property parameter name (e.g., PARTSTAT)
-	 */
+     */
 
     /* do children of param match param_filter? */
 
-	int found = 0;
-	while (param) {
+    int found = 0;
+    while (param) {
 
-		const char *prname;
+        const char *prname;
 
-	    icalparameter_kind kind = icalparameter_isa(param);
+        icalparameter_kind kind = icalparameter_isa(param);
 
-	    if (kind == ICAL_X_PARAMETER) {
-	        prname = icalparameter_get_xname(param);
-	    }
-	    else if (kind == ICAL_IANA_PARAMETER) {
-	    	prname = icalparameter_get_iana_name(param);
-	    }
+        if (kind == ICAL_X_PARAMETER) {
+            prname = icalparameter_get_xname(param);
+        }
+        else if (kind == ICAL_IANA_PARAMETER) {
+            prname = icalparameter_get_iana_name(param);
+        }
 
         elem = param_filter;
 
-		while (elem) {
+        while (elem) {
 
-			name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
-			if (!name) {
-				/* MUST violation */
-				err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-						APR_SUCCESS,
-						"Name attribute must exist in param-filter");
-				err->tagname = "CALDAV:valid-filter";
-				return err;
-			}
+            name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
+            if (!name) {
+                /* MUST violation */
+                err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                        APR_SUCCESS,
+                        "Name attribute must exist in param-filter");
+                err->tagname = "CALDAV:valid-filter";
+                return err;
+            }
 
-			/* matched our name? found it */
-			if (prname && name->value && !strcmp(prname, name->value)) {
-				found = 1;
-				break;
-			}
+            /* matched our name? found it */
+            if (prname && name->value && !strcmp(prname, name->value)) {
+                found = 1;
+                break;
+            }
 
-			elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
-		}
+            elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
+        }
 
-		if (!found) {
-			/* not found, no match yet, unless... */
+        if (!found) {
+            /* not found, no match yet, unless... */
 
-	        elem = param_filter;
+            elem = param_filter;
 
-			while (elem) {
-				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+            while (elem) {
+                if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-					break;
-				}
+                    break;
+                }
 
-				elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
-			}
+                elem = dav_find_next_ns(elem, ctx->ns, "param-filter");
+            }
 
-		} else {
+        } else {
 
-			/* found, look at the next level */
+            /* found, look at the next level */
 
-			/* explicit is-not-defined? */
-			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-				/* found, but we didn't want to find, so no match */
+            /* explicit is-not-defined? */
+            if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+                /* found, but we didn't want to find, so no match */
 
-			}
+            }
 
-			else {
+            else {
 
-				text_match = dav_find_child_ns(elem, ctx->ns, "text-match");
-				if (text_match) {
+                text_match = dav_find_child_ns(elem, ctx->ns, "text-match");
+                if (text_match) {
 
-	                const char *text =
-	                        icalparameter_enum_to_string(icalparameter_get_value(param));
+                    const char *text =
+                            icalparameter_enum_to_string(icalparameter_get_value(param));
 
-	                if (!text) {
-	                    text = icalparameter_get_xvalue(param);
-	                }
+                    if (!text) {
+                        text = icalparameter_get_xvalue(param);
+                    }
 
-					err = dav_calendar_text_match(ctx, timezone, text_match, text);
-					if (err) {
-						return err;
-					}
+                    err = dav_calendar_text_match(ctx, timezone, text_match, text);
+                    if (err) {
+                        return err;
+                    }
 
-				}
+                }
 
-				/* none of the above? we have a match */
-				if (!stt && !ett && !text_match) {
+                /* none of the above? we have a match */
+                if (!stt && !ett && !text_match) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
-		}
+            }
+        }
 
-		param = icalproperty_get_next_parameter(prop,
-				ICAL_ANY_PARAMETER);
-	}
+        param = icalproperty_get_next_parameter(prop,
+                ICAL_ANY_PARAMETER);
+    }
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_prop_filter(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, const apr_xml_elem *prop_filter,
-		icalcomponent *comp, icalproperty *prop, icaltimetype *stt,
-		icaltimetype *ett)
+        const apr_xml_elem *timezone, const apr_xml_elem *prop_filter,
+        icalcomponent *comp, icalproperty *prop, icaltimetype *stt,
+        icaltimetype *ett)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_elem *param_filter = NULL;
-	const apr_xml_elem *is_not_defined = NULL;
-	const apr_xml_elem *time_range = NULL;
-	const apr_xml_elem *text_match = NULL;
-	const apr_xml_elem *elem = NULL;
-	const apr_xml_attr *name;
+    const apr_xml_elem *param_filter = NULL;
+    const apr_xml_elem *is_not_defined = NULL;
+    const apr_xml_elem *time_range = NULL;
+    const apr_xml_elem *text_match = NULL;
+    const apr_xml_elem *elem = NULL;
+    const apr_xml_attr *name;
 
-	const char *ppname;
+    const char *ppname;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	/*
-	 * <!ELEMENT prop-filter (is-not-defined |
+    /*
+     * <!ELEMENT prop-filter (is-not-defined |
      *                        ((time-range | text-match)?,
      *                         param-filter*))>
      *
      * <!ATTLIST prop-filter name CDATA #REQUIRED>
      * name value: a calendar property name (e.g., ATTENDEE)
-	 */
+     */
 
     /* do children of prop match prop_filter? */
 
-	int found = 0;
-	while (prop) {
+    int found = 0;
+    while (prop) {
 
-	    ppname = icalproperty_get_property_name(prop);
+        ppname = icalproperty_get_property_name(prop);
 
         elem = prop_filter;
 
-		while (elem) {
+        while (elem) {
 
-			name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
-			if (!name) {
-				/* MUST violation */
-				err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-						APR_SUCCESS,
-						"Name attribute must exist in prop-filter");
-				err->tagname = "CALDAV:valid-filter";
-				return err;
-			}
+            name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
+            if (!name) {
+                /* MUST violation */
+                err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                        APR_SUCCESS,
+                        "Name attribute must exist in prop-filter");
+                err->tagname = "CALDAV:valid-filter";
+                return err;
+            }
 
-			/* matched our name? found it */
-			if (ppname && name->value && !strcmp(ppname, name->value)) {
-				found = 1;
-				break;
-			}
+            /* matched our name? found it */
+            if (ppname && name->value && !strcmp(ppname, name->value)) {
+                found = 1;
+                break;
+            }
 
-			elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
-		}
+            elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
+        }
 
-		if (!found) {
-			/* not found, no match yet, unless... */
+        if (!found) {
+            /* not found, no match yet, unless... */
 
-	        elem = prop_filter;
+            elem = prop_filter;
 
-			while (elem) {
-				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+            while (elem) {
+                if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-					break;
-				}
+                    break;
+                }
 
-				elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
-			}
+                elem = dav_find_next_ns(elem, ctx->ns, "prop-filter");
+            }
 
-		} else {
+        } else {
 
-			/* found, look at the next level */
+            /* found, look at the next level */
 
-			/* explicit is-not-defined? */
-			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-				/* found, but we didn't want to find, so no match */
+            /* explicit is-not-defined? */
+            if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+                /* found, but we didn't want to find, so no match */
 
-			}
+            }
 
-			else {
+            else {
 
-				if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
+                if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
 
-					err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
-					if (err) {
-						return err;
-					}
+                    err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
+                    if (err) {
+                        return err;
+                    }
 
-				}
+                }
 
-				if ((text_match = dav_find_child_ns(elem, ctx->ns, "text-match"))) {
+                if ((text_match = dav_find_child_ns(elem, ctx->ns, "text-match"))) {
 
-					const char *text = icalproperty_get_value_as_string(prop);
+                    const char *text = icalproperty_get_value_as_string(prop);
 
-					err = dav_calendar_text_match(ctx, timezone, text_match, text);
-					if (err) {
-						return err;
-					}
+                    err = dav_calendar_text_match(ctx, timezone, text_match, text);
+                    if (err) {
+                        return err;
+                    }
 
-				}
+                }
 
-				if ((param_filter = dav_find_child_ns(elem, ctx->ns,
-						"param-filter"))) {
+                if ((param_filter = dav_find_child_ns(elem, ctx->ns,
+                        "param-filter"))) {
 
-					err = dav_calendar_param_filter(ctx, timezone, param_filter,
-							prop, icalproperty_get_first_parameter(prop,
-									ICAL_ANY_PARAMETER), stt, ett);
-					if (err) {
-						return err;
-					}
-				}
+                    err = dav_calendar_param_filter(ctx, timezone, param_filter,
+                            prop, icalproperty_get_first_parameter(prop,
+                                    ICAL_ANY_PARAMETER), stt, ett);
+                    if (err) {
+                        return err;
+                    }
+                }
 
-				if (stt && ett) {
+                if (stt && ett) {
 
-					err = dav_calendar_prop_time_range(ctx, timezone, comp, prop,
-							stt, ett);
-					if (err) {
-						return err;
-					}
+                    err = dav_calendar_prop_time_range(ctx, timezone, comp, prop,
+                            stt, ett);
+                    if (err) {
+                        return err;
+                    }
 
-				}
+                }
 
-				/* none of the above? we have a match */
-				if (!stt && !ett && !time_range && !text_match && !param_filter) {
+                /* none of the above? we have a match */
+                if (!stt && !ett && !time_range && !text_match && !param_filter) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
+                }
 
-			}
-		}
+            }
+        }
 
-		prop = icalcomponent_get_next_property(comp,
-				ICAL_ANY_PROPERTY);
-	}
+        prop = icalcomponent_get_next_property(comp,
+                ICAL_ANY_PROPERTY);
+    }
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_comp_filter(dav_calendar_ctx *ctx,
-		const apr_xml_elem *timezone, const apr_xml_elem *comp_filter,
-		icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
+        const apr_xml_elem *timezone, const apr_xml_elem *comp_filter,
+        icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_elem *prop_filter = NULL;
-	const apr_xml_elem *is_not_defined = NULL;
-	const apr_xml_elem *time_range = NULL;
-	const apr_xml_elem *elem = NULL;
-	const apr_xml_attr *name;
+    const apr_xml_elem *prop_filter = NULL;
+    const apr_xml_elem *is_not_defined = NULL;
+    const apr_xml_elem *time_range = NULL;
+    const apr_xml_elem *elem = NULL;
+    const apr_xml_attr *name;
 
-	/* we already matched? */
-	if (ctx->match) {
-		return NULL;
-	}
+    /* we already matched? */
+    if (ctx->match) {
+        return NULL;
+    }
 
-	/*
-	 * <!ELEMENT comp-filter (is-not-defined | (time-range?,
+    /*
+     * <!ELEMENT comp-filter (is-not-defined | (time-range?,
      *                        prop-filter*, comp-filter*))>
      *
      * <!ATTLIST comp-filter name CDATA #REQUIRED>
      * name value: a calendar object or calendar component
      *             type (e.g., VEVENT)
-	 */
+     */
 
     /* do children of comp match comp_filter? */
     int found = 0;
@@ -1285,217 +1285,217 @@ static dav_error *dav_calendar_comp_filter(dav_calendar_ctx *ctx,
 
         elem = comp_filter;
 
-		while (elem) {
+        while (elem) {
 
-			name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
-			if (!name) {
-				/* MUST violation */
-				err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
-						APR_SUCCESS,
-						"Name attribute must exist in comp-filter");
-				err->tagname = "CALDAV:valid-filter";
-				return err;
-			}
+            name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
+            if (!name) {
+                /* MUST violation */
+                err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0,
+                        APR_SUCCESS,
+                        "Name attribute must exist in comp-filter");
+                err->tagname = "CALDAV:valid-filter";
+                return err;
+            }
 
-			/*
-			 * Bug: https://github.com/libical/libical/issues/433
-			 *
-			 * There is no way to get the component name, and so we cannot
-			 * support filtering of experimental components.
-			 */
-			/* no kind match? leave with no match */
-			if (ev == icalcomponent_string_to_kind((char *) name->value)) {
-				found = 1;
-				break;
-			}
+            /*
+             * Bug: https://github.com/libical/libical/issues/433
+             *
+             * There is no way to get the component name, and so we cannot
+             * support filtering of experimental components.
+             */
+            /* no kind match? leave with no match */
+            if (ev == icalcomponent_string_to_kind((char *) name->value)) {
+                found = 1;
+                break;
+            }
 
-			elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
-		}
+            elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
+        }
 
-		if (!found) {
-			/* not found, no match yet, unless... */
+        if (!found) {
+            /* not found, no match yet, unless... */
 
-	        elem = comp_filter;
+            elem = comp_filter;
 
-			while (elem) {
-				if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
+            while (elem) {
+                if (dav_find_child_ns(elem, ctx->ns, "is-not-defined")) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-					break;
-				}
+                    break;
+                }
 
-				elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
-			}
+                elem = dav_find_next_ns(elem, ctx->ns, "comp-filter");
+            }
 
-		} else {
+        } else {
 
-			/* found, look at the next level */
+            /* found, look at the next level */
 
-			/* explicit is-not-defined? */
-			if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
-				/* found, but we didn't want to find, so no match */
+            /* explicit is-not-defined? */
+            if ((is_not_defined = dav_find_child_ns(elem, ctx->ns, "is-not-defined"))) {
+                /* found, but we didn't want to find, so no match */
 
-			}
+            }
 
-			else {
+            else {
 
-				if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
+                if ((time_range = dav_find_child_ns(elem, ctx->ns, "time-range"))) {
 
-					err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
-					if (err) {
-						return err;
-					}
+                    err = dav_calendar_time_range(ctx, timezone, time_range, &stt, &ett);
+                    if (err) {
+                        return err;
+                    }
 
-				}
+                }
 
-				if ((prop_filter = dav_find_child_ns(elem, ctx->ns,
-						"prop-filter"))) {
+                if ((prop_filter = dav_find_child_ns(elem, ctx->ns,
+                        "prop-filter"))) {
 
-					err = dav_calendar_prop_filter(ctx, timezone, prop_filter,
-							comp, icalcomponent_get_first_property(comp,
-									ICAL_ANY_PROPERTY), stt, ett);
-					if (err) {
-						return err;
-					}
-				}
+                    err = dav_calendar_prop_filter(ctx, timezone, prop_filter,
+                            comp, icalcomponent_get_first_property(comp,
+                                    ICAL_ANY_PROPERTY), stt, ett);
+                    if (err) {
+                        return err;
+                    }
+                }
 
-				if ((comp_filter = dav_find_child_ns(elem, ctx->ns,
-						"comp-filter"))) {
+                if ((comp_filter = dav_find_child_ns(elem, ctx->ns,
+                        "comp-filter"))) {
 
-					err = dav_calendar_comp_filter(ctx, timezone, comp_filter,
-							icalcomponent_get_first_component(comp,
-									ICAL_ANY_COMPONENT), stt, ett);
-					if (err) {
-						return err;
-					}
-				}
+                    err = dav_calendar_comp_filter(ctx, timezone, comp_filter,
+                            icalcomponent_get_first_component(comp,
+                                    ICAL_ANY_COMPONENT), stt, ett);
+                    if (err) {
+                        return err;
+                    }
+                }
 
-				if (stt && ett && !comp_filter && !prop_filter) {
+                if (stt && ett && !comp_filter && !prop_filter) {
 
-					if (icalcomponent_isa(comp) == ICAL_VCALENDAR_COMPONENT) {
+                    if (icalcomponent_isa(comp) == ICAL_VCALENDAR_COMPONENT) {
 
-						comp = icalcomponent_get_first_component(comp,
-														ICAL_ANY_COMPONENT);
-						while (comp) {
+                        comp = icalcomponent_get_first_component(comp,
+                                                        ICAL_ANY_COMPONENT);
+                        while (comp) {
 
-							err = dav_calendar_comp_time_range(ctx, timezone, comp,
-									stt, ett);
-							if (err) {
-								return err;
-							}
+                            err = dav_calendar_comp_time_range(ctx, timezone, comp,
+                                    stt, ett);
+                            if (err) {
+                                return err;
+                            }
 
-							comp = icalcomponent_get_next_component(comp,
-									ICAL_ANY_COMPONENT);
-						}
-					}
-					else {
+                            comp = icalcomponent_get_next_component(comp,
+                                    ICAL_ANY_COMPONENT);
+                        }
+                    }
+                    else {
 
-						err = dav_calendar_comp_time_range(ctx, timezone, comp, stt,
-								ett);
-						if (err) {
-							return err;
-						}
+                        err = dav_calendar_comp_time_range(ctx, timezone, comp, stt,
+                                ett);
+                        if (err) {
+                            return err;
+                        }
 
-					}
+                    }
 
-				}
+                }
 
-				/* none of the above? we have a match */
-				if (!stt && !ett && !time_range && !prop_filter && !comp_filter) {
+                /* none of the above? we have a match */
+                if (!stt && !ett && !time_range && !prop_filter && !comp_filter) {
 
-					/* we have a match! */
-					ctx->match = 1;
+                    /* we have a match! */
+                    ctx->match = 1;
 
-				}
-			}
-		}
+                }
+            }
+        }
 
-		comp = icalcomponent_get_next_component(comp,
-				ICAL_ANY_COMPONENT);
+        comp = icalcomponent_get_next_component(comp,
+                ICAL_ANY_COMPONENT);
     }
 
-	return NULL;
+    return NULL;
 }
 
 static dav_error *dav_calendar_filter(dav_calendar_ctx *ctx, icalcomponent *comp)
 {
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_doc *doc = ctx->element->doc;
-	const apr_xml_elem *filter = NULL;
-	const apr_xml_elem *comp_filter = NULL;
-	const apr_xml_elem *timezone = NULL;
+    const apr_xml_doc *doc = ctx->element->doc;
+    const apr_xml_elem *filter = NULL;
+    const apr_xml_elem *comp_filter = NULL;
+    const apr_xml_elem *timezone = NULL;
 
-	/*
-	 * <!ELEMENT calendar-query ((DAV:allprop |
-	 *                            DAV:propname |
-	 *                            DAV:prop)?, filter, timezone?)>
-	 */
+    /*
+     * <!ELEMENT calendar-query ((DAV:allprop |
+     *                            DAV:propname |
+     *                            DAV:prop)?, filter, timezone?)>
+     */
     if (dav_validate_root_ns(doc, ctx->ns, "calendar-query")) {
 
-    	/*
-    	 * <!ELEMENT filter (comp-filter)>
-    	 */
-    	if ((filter = dav_find_child_ns(doc->root, ctx->ns, "filter")) == NULL) {
-    		/* MUST violation */
+        /*
+         * <!ELEMENT filter (comp-filter)>
+         */
+        if ((filter = dav_find_child_ns(doc->root, ctx->ns, "filter")) == NULL) {
+            /* MUST violation */
             err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
                     "Filter element must exist beneath calendar-query");
             err->tagname = "CALDAV:valid-filter";
             return err;
-    	}
+        }
 
-    	timezone = dav_find_child_ns(doc->root, ctx->ns, "timezone");
-    	if (timezone) {
+        timezone = dav_find_child_ns(doc->root, ctx->ns, "timezone");
+        if (timezone) {
 
-			icalcomponent *tz = icalparser_parse_string(
-					dav_xml_get_cdata(timezone, ctx->r->pool,
-							1 /* strip_white */));
-    	    if(icalerrno != ICAL_NO_ERROR) {
-    	        if (tz) {
-    	            icalcomponent_free(tz);
-    	        }
+            icalcomponent *tz = icalparser_parse_string(
+                    dav_xml_get_cdata(timezone, ctx->r->pool,
+                            1 /* strip_white */));
+            if(icalerrno != ICAL_NO_ERROR) {
+                if (tz) {
+                    icalcomponent_free(tz);
+                }
                 err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
-                		icalerror_perror());
+                        icalerror_perror());
                 err->tagname = "CALDAV:valid-filter";
                 return err;
-    	    }
+            }
 
-    	    icalcomponent_merge_component(comp, tz);
-    	}
+            icalcomponent_merge_component(comp, tz);
+        }
 
-    	if ((comp_filter = dav_find_child_ns(filter, ctx->ns, "comp-filter")) == NULL) {
-    		/* MUST violation */
+        if ((comp_filter = dav_find_child_ns(filter, ctx->ns, "comp-filter")) == NULL) {
+            /* MUST violation */
             err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
                     "Comp-filter element must exist beneath filter element");
             err->tagname = "CALDAV:valid-filter";
             return err;
-    	}
+        }
 
-		if ((err = dav_calendar_comp_filter(ctx, timezone, comp_filter, comp,
-				NULL, NULL))) {
-    		return err;
-    	}
+        if ((err = dav_calendar_comp_filter(ctx, timezone, comp_filter, comp,
+                NULL, NULL))) {
+            return err;
+        }
 
-    	return NULL;
+        return NULL;
     }
 
     else if (dav_validate_root_ns(doc, ctx->ns, "calendar-multiget")) {
 
-    	/* no filters on multiget */
-    	ctx->match = 1;
+        /* no filters on multiget */
+        ctx->match = 1;
 
-    	return NULL;
+        return NULL;
     }
 
     else if (dav_validate_root_ns(doc, ctx->ns, "free-busy-query")) {
 
-    	// TODO filter me
-    	return NULL;
+        // TODO filter me
+        return NULL;
     }
 
-	/* MUST violation */
+    /* MUST violation */
     err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
             "Root element not validated");
     err->tagname = "CALDAV:valid-filter";
@@ -1504,173 +1504,173 @@ static dav_error *dav_calendar_filter(dav_calendar_ctx *ctx, icalcomponent *comp
 
 /* filter by <C:prop/> beneath calendar-data */
 static dav_error *dav_calendar_prop(dav_calendar_ctx *ctx,
-		const apr_xml_elem *parent, icalcomponent *icomp)
+        const apr_xml_elem *parent, icalcomponent *icomp)
 {
-	dav_error *err;
+    dav_error *err;
 
-	icalproperty *cp, *next;
+    icalproperty *cp, *next;
     const char *pname;
 
-	const apr_xml_elem *elem = NULL;
-	const apr_xml_attr *name, *novalue;
+    const apr_xml_elem *elem = NULL;
+    const apr_xml_attr *name, *novalue;
 
-	/* anything to filter? */
-	elem = dav_find_child_ns(parent, ctx->ns, "allprop");
-	if (elem) {
-		return NULL;
-	}
+    /* anything to filter? */
+    elem = dav_find_child_ns(parent, ctx->ns, "allprop");
+    if (elem) {
+        return NULL;
+    }
 
-	elem = dav_find_child_ns(parent, ctx->ns, "prop");
-	if (!elem) {
-		return NULL;
-	}
+    elem = dav_find_child_ns(parent, ctx->ns, "prop");
+    if (!elem) {
+        return NULL;
+    }
 
-	for (cp = icalcomponent_get_first_property(icomp, ICAL_ANY_PROPERTY);
-			cp != NULL; cp = next) {
+    for (cp = icalcomponent_get_first_property(icomp, ICAL_ANY_PROPERTY);
+            cp != NULL; cp = next) {
 
-	    next = icalcomponent_get_next_property(icomp, ICAL_ANY_PROPERTY);
+        next = icalcomponent_get_next_property(icomp, ICAL_ANY_PROPERTY);
 
-	    pname = icalproperty_get_property_name(cp);
+        pname = icalproperty_get_property_name(cp);
 
-		elem = dav_find_child_ns(parent, ctx->ns, "prop");
-		if (elem) {
-			int found = 0;
-			while (elem) {
+        elem = dav_find_child_ns(parent, ctx->ns, "prop");
+        if (elem) {
+            int found = 0;
+            while (elem) {
 
-				name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
-				if (!name) {
-					/* MUST violation */
-			        err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
-			                "Name attribute must exist in prop");
-			        err->tagname = "CALDAV:valid-filter";
-			        return err;
-				}
+                name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
+                if (!name) {
+                    /* MUST violation */
+                    err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
+                            "Name attribute must exist in prop");
+                    err->tagname = "CALDAV:valid-filter";
+                    return err;
+                }
 
-				novalue = dav_find_attr_ns(elem, APR_XML_NS_NONE, "novalue");
+                novalue = dav_find_attr_ns(elem, APR_XML_NS_NONE, "novalue");
 
-				if (pname && name->value && !strcmp(pname, name->value)) {
-					found = 1;
-					break;
-				}
+                if (pname && name->value && !strcmp(pname, name->value)) {
+                    found = 1;
+                    break;
+                }
 
-				elem = dav_find_next_ns(elem, ctx->ns, "prop");
-			}
+                elem = dav_find_next_ns(elem, ctx->ns, "prop");
+            }
 
-			if (!found) {
-				/* not found, strip the property */
+            if (!found) {
+                /* not found, strip the property */
 
                 icalcomponent_remove_property(icomp, cp);
                 icalproperty_free(cp);
 
-			}
-			else {
-				/* found, strip the value? */
+            }
+            else {
+                /* found, strip the value? */
 
-				if (novalue && !strcasecmp(novalue->value, "yes")) {
-					icalvalue *v = icalproperty_get_value(cp);
+                if (novalue && !strcasecmp(novalue->value, "yes")) {
+                    icalvalue *v = icalproperty_get_value(cp);
 
-					if (v) {
-						v = icalvalue_new_from_string(icalvalue_isa(v), "");
+                    if (v) {
+                        v = icalvalue_new_from_string(icalvalue_isa(v), "");
 
-						icalproperty_set_value(cp, v);
-					}
-				}
+                        icalproperty_set_value(cp, v);
+                    }
+                }
 
-			}
-		}
-	}
+            }
+        }
+    }
 
-	return NULL;
+    return NULL;
 }
 
 /* filter by <C:comp/> beneath calendar-data */
 static dav_error *dav_calendar_comp(dav_calendar_ctx *ctx,
-		const apr_xml_elem *parent, icalcomponent **icomp)
+        const apr_xml_elem *parent, icalcomponent **icomp)
 {
-	/*
-	 * We walk the ical component, and the <C:comp/> elements, and if
-	 * any <C:comp/> elements are found, we strip out everything outside
-	 * of the set of those elements.
-	 */
+    /*
+     * We walk the ical component, and the <C:comp/> elements, and if
+     * any <C:comp/> elements are found, we strip out everything outside
+     * of the set of those elements.
+     */
 
-	dav_error *err;
+    dav_error *err;
 
-	const apr_xml_elem *elem = NULL;
-	const apr_xml_attr *name;
+    const apr_xml_elem *elem = NULL;
+    const apr_xml_attr *name;
 
-	icalcomponent *cm, *next;
+    icalcomponent *cm, *next;
     icalcomponent_kind ev = icalcomponent_isa(*icomp);
 
-	int found = 0;
+    int found = 0;
 
-	/* anything to filter? */
-	elem = dav_find_child_ns(parent, ctx->ns, "allcomp");
-	if (elem) {
-		return NULL;
-	}
+    /* anything to filter? */
+    elem = dav_find_child_ns(parent, ctx->ns, "allcomp");
+    if (elem) {
+        return NULL;
+    }
 
-	elem = dav_find_child_ns(parent, ctx->ns, "comp");
-	if (!elem) {
-		return NULL;
-	}
+    elem = dav_find_child_ns(parent, ctx->ns, "comp");
+    if (!elem) {
+        return NULL;
+    }
 
-	while (elem) {
+    while (elem) {
 
-		name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
-		if (!name) {
-			/* MUST violation */
-			err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
-					"Name attribute must exist in comp");
-			err->tagname = "CALDAV:valid-filter";
-			return err;
-		}
+        name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
+        if (!name) {
+            /* MUST violation */
+            err = dav_new_error(ctx->r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
+                    "Name attribute must exist in comp");
+            err->tagname = "CALDAV:valid-filter";
+            return err;
+        }
 
-		/*
-		 * Bug: https://github.com/libical/libical/issues/433
-		 *
-		 * There is no way to get the component name, and so we cannot
-		 * support filtering of experimental components.
-		 */
-		if (ev == icalcomponent_string_to_kind((char *) name->value)) {
-			found = 1;
-			break;
-		}
+        /*
+         * Bug: https://github.com/libical/libical/issues/433
+         *
+         * There is no way to get the component name, and so we cannot
+         * support filtering of experimental components.
+         */
+        if (ev == icalcomponent_string_to_kind((char *) name->value)) {
+            found = 1;
+            break;
+        }
 
-		elem = dav_find_next_ns(elem, ctx->ns, "comp");
-	}
+        elem = dav_find_next_ns(elem, ctx->ns, "comp");
+    }
 
-	if (!found) {
-		/* not found, strip it */
+    if (!found) {
+        /* not found, strip it */
 
-		icalcomponent *iparent = icalcomponent_get_parent(*icomp);
-		if (iparent) {
-			icalcomponent_remove_component(iparent, *icomp);
-		} else {
-			icalcomponent_free(*icomp);
-			*icomp = NULL;
-		}
+        icalcomponent *iparent = icalcomponent_get_parent(*icomp);
+        if (iparent) {
+            icalcomponent_remove_component(iparent, *icomp);
+        } else {
+            icalcomponent_free(*icomp);
+            *icomp = NULL;
+        }
 
-	} else {
-		/* found, look at the next level */
+    } else {
+        /* found, look at the next level */
 
-		err = dav_calendar_prop(ctx, elem, *icomp);
-		if (err) {
-			return err;
-		}
+        err = dav_calendar_prop(ctx, elem, *icomp);
+        if (err) {
+            return err;
+        }
 
-		for (cm = icalcomponent_get_first_component(*icomp, ICAL_ANY_COMPONENT);
-				cm != NULL; cm = next) {
+        for (cm = icalcomponent_get_first_component(*icomp, ICAL_ANY_COMPONENT);
+                cm != NULL; cm = next) {
 
-			next = icalcomponent_get_next_component(*icomp, ICAL_ANY_COMPONENT);
+            next = icalcomponent_get_next_component(*icomp, ICAL_ANY_COMPONENT);
 
-			err = dav_calendar_comp(ctx, elem, &cm);
-			if (err) {
-				return err;
-			}
-		}
-	}
+            err = dav_calendar_comp(ctx, elem, &cm);
+            if (err) {
+                return err;
+            }
+        }
+    }
 
-	return NULL;
+    return NULL;
 }
 
 static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
@@ -1701,7 +1701,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
          e = APR_BUCKET_NEXT(e))
     {
 
-    	e = APR_BRIGADE_FIRST(bb);
+        e = APR_BRIGADE_FIRST(bb);
 
         /* EOS means we are done. */
         if (APR_BUCKET_IS_EOS(e)) {
@@ -1709,19 +1709,19 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
         }
 
         /* grab a line of max HUGE_STRING_LEN - RFC5545 says SHOULD be 75 chars, not MUST */
-		if (APR_SUCCESS
-				== (rv = apr_brigade_split_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
-	        apr_off_t offset = 0;
-	        apr_size_t size = 0;
+        if (APR_SUCCESS
+                == (rv = apr_brigade_split_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
+            apr_off_t offset = 0;
+            apr_size_t size = 0;
 
-			apr_brigade_length(ctx->bb, 1, &offset);
+            apr_brigade_length(ctx->bb, 1, &offset);
 
-			if (offset >= HUGE_STRING_LEN) {
+            if (offset >= HUGE_STRING_LEN) {
                 ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
                         "iCalendar line was too long - not a calendar?");
-			}
+            }
 
-			len += offset;
+            len += offset;
 
             if (len > conf->max_resource_size) {
                 return APR_ENOSPC;
@@ -1731,7 +1731,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
 
             size = offset;
             if ((rv = apr_brigade_flatten(ctx->bb, buffer, &size)) != APR_SUCCESS) {
-            	icalmemory_free_buffer(buffer);
+                icalmemory_free_buffer(buffer);
                 return rv;
             }
             buffer[size] = 0;
@@ -1773,7 +1773,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
 
             apr_brigade_cleanup(ctx->bb);
 
-		}
+        }
         else {
             return rv;
         }
@@ -1797,8 +1797,8 @@ static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
     f->r = r;
     f->ctx = ctx;
 
-	ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
-			DAV_CALENDAR_XML_NAMESPACE);
+    ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
+            DAV_CALENDAR_XML_NAMESPACE);
     ctx->bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 
     ctx->parser = icalparser_new();
@@ -1907,15 +1907,15 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             // FIXME: if there is no match, we want the entire resource to vanish from results
             if (ctx.match && ctx.comp) {
 
-            	apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
-            			global_ns, info->name));
+                apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
+                        global_ns, info->name));
 
-            	apr_text_append(p, phdr,
-            			apr_pescape_entity(p,
-            					icalcomponent_as_ical_string(ctx.comp), 0));
+                apr_text_append(p, phdr,
+                        apr_pescape_entity(p,
+                                icalcomponent_as_ical_string(ctx.comp), 0));
 
-            	apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
-            			global_ns, info->name));
+                apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
+                        global_ns, info->name));
 
             }
 
@@ -1969,17 +1969,17 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
                     global_ns, info->name));
 
             apr_text_append(p, phdr,
-            		apr_psprintf(p,
-						"<lp%d:supported-collation>"
-						DAV_CALENDAR_COLLATION_ASCII_CASEMAP
-						"</lp%d:supported-collation>",
-						global_ns, global_ns));
+                    apr_psprintf(p,
+                        "<lp%d:supported-collation>"
+                        DAV_CALENDAR_COLLATION_ASCII_CASEMAP
+                        "</lp%d:supported-collation>",
+                        global_ns, global_ns));
             apr_text_append(p, phdr,
-            		apr_psprintf(p,
-						"<lp%d:supported-collation>"
-						DAV_CALENDAR_COLLATION_OCTET
-						"</lp%d:supported-collation>",
-						global_ns, global_ns));
+                    apr_psprintf(p,
+                        "<lp%d:supported-collation>"
+                        DAV_CALENDAR_COLLATION_OCTET
+                        "</lp%d:supported-collation>",
+                        global_ns, global_ns));
 
             apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
                     global_ns, info->name));
@@ -1987,7 +1987,7 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
             break;
         }
         default:
-        	break;
+            break;
         }
 
     }
@@ -2271,7 +2271,7 @@ static dav_error * dav_calendar_report_walker(dav_walk_resource *wres, int callt
 
     /* ignore collections */
     if (wres->resource->collection) {
-    	return NULL;
+        return NULL;
     }
 
     /* check for any method preconditions */
@@ -2353,7 +2353,7 @@ static dav_error *dav_calendar_query_report(request_rec *r,
 
     /* ### validate that only one of these three elements is present */
 
-	/* default is allprop */
+    /* default is allprop */
     ctx.propfind_type = DAV_PROPFIND_IS_ALLPROP;
     if (dav_find_child(doc->root, "propname") != NULL) {
         ctx.propfind_type = DAV_PROPFIND_IS_PROPNAME;
@@ -2362,7 +2362,7 @@ static dav_error *dav_calendar_query_report(request_rec *r,
         ctx.propfind_type = DAV_PROPFIND_IS_PROP;
     }
 
-	ns = apr_xml_insert_uri(doc->namespaces, DAV_CALENDAR_XML_NAMESPACE);
+    ns = apr_xml_insert_uri(doc->namespaces, DAV_CALENDAR_XML_NAMESPACE);
 
     if (dav_find_child_ns(doc->root, ns, "filter") != NULL) {
         ctx.propfind_type = DAV_PROPFIND_IS_PROP;
