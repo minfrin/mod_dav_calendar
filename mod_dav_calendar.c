@@ -89,8 +89,8 @@
  *
  * TODO: We are still not in compliance with https://tools.ietf.org/html/rfc4791.
  *
- * - We do not yet support the calendar-query report.
  * - We do not yet enforce many of the preconditions defined in the RFC.
+ * - We do not support https://tools.ietf.org/html/rfc7953 yet.
  *
  */
 #include <apr_lib.h>
@@ -2654,11 +2654,6 @@ static dav_error *dav_calendar_query_report(request_rec *r,
     int depth;
     int ns = 0;
 
-    if (0) {
-        return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
-                "The requested report is not supported yet");
-    }
-
     /* ### validate that only one of these three elements is present */
 
     /* default is allprop */
@@ -2919,11 +2914,6 @@ static dav_error *dav_calendar_free_busy_query_report(request_rec *r,
     int depth;
     int ns = 0;
     int status;
-
-    if (0) {
-        return dav_new_error(resource->pool, HTTP_NOT_IMPLEMENTED, 0, 0,
-                "The requested report is not supported yet");
-    }
 
     /* ### validate that only time-range is present */
 
