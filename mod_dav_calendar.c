@@ -324,14 +324,23 @@ static const dav_liveprop_group dav_calendar_liveprop_group =
 };
 
 typedef struct dav_calendar_ctx {
-    icalcomponent *comp;
-    dav_error *err;
-    apr_sha1_ctx_t *sha1;
     request_rec *r;
+    apr_bucket_brigade *bb;
+    dav_error *err;
+    icalparser *parser;
+    icalcomponent *comp;
     dav_liveprop_elem *element;
+    apr_sha1_ctx_t *sha1;
     int ns;
     int match;
 } dav_calendar_ctx;
+
+static apr_status_t icalparser_cleanup(void *data)
+{
+	icalparser *comp = data;
+	icalparser_free(comp);
+    return APR_SUCCESS;
+}
 
 static apr_status_t icalcomponent_cleanup(void *data)
 {
@@ -1679,6 +1688,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     apr_size_t len = 0;
     apr_status_t rv = APR_SUCCESS;
 
+
     /*
      * Alas the libical library does not have a way to parse a buffer
      * of fixed length, only a NUL terminated string. To avoid us having
@@ -1690,80 +1700,84 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
          e != APR_BRIGADE_SENTINEL(bb);
          e = APR_BUCKET_NEXT(e))
     {
-        const char *data;
-        apr_size_t size;
 
-        e = APR_BRIGADE_FIRST(bb);
+    	e = APR_BRIGADE_FIRST(bb);
 
         /* EOS means we are done. */
         if (APR_BUCKET_IS_EOS(e)) {
             break;
         }
 
-        /* let's count this data */
-        if (APR_SUCCESS == (rv = apr_bucket_read(e, &data, &size,
-                APR_BLOCK_READ))) {
+        /* grab a line */
+		if (APR_SUCCESS
+				== (rv = apr_brigade_split_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
+	        apr_off_t offset = 0;
+	        apr_size_t size = 0;
 
-            len += size;
+			apr_brigade_length(ctx->bb, 1, &offset);
+
+			if (offset >= HUGE_STRING_LEN) {
+                ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
+                        "iCalendar line was too long - not a calendar?");
+			}
+
+			len += offset;
 
             if (len > conf->max_resource_size) {
                 return APR_ENOSPC;
             }
-        }
+
+            buffer = icalmemory_new_buffer(offset + 1);
+
+            size = offset;
+            if ((rv = apr_brigade_flatten(ctx->bb, buffer, &size)) != APR_SUCCESS) {
+            	icalmemory_free_buffer(buffer);
+                return rv;
+            }
+            buffer[size] = 0;
+
+            comp = icalparser_add_line(ctx->parser, buffer);
+            if(icalerrno != ICAL_NO_ERROR) {
+                ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
+                        icalerror_perror());
+                return APR_EGENERAL;
+            }
+
+            /* found a calendar? */
+            if (comp) {
+
+                /* apply search <C:filter/>, ctx->match will contain the result */
+                ctx->err = dav_calendar_filter(ctx, comp);
+                if (ctx->err) {
+                    icalcomponent_free(comp);
+                    return APR_EGENERAL;
+                }
+
+                /* strip away everything not listed beneath <C:comp/> */
+                ctx->err = dav_calendar_comp(ctx, ctx->element->elem, &comp);
+                if (ctx->err) {
+                    icalcomponent_free(comp);
+                    return APR_EGENERAL;
+                }
+
+                if (!ctx->comp) {
+                    ctx->comp = comp;
+                    apr_pool_cleanup_register(f->r->pool, comp, icalcomponent_cleanup,
+                            apr_pool_cleanup_null);
+                }
+                else {
+                    icalcomponent_merge_component(ctx->comp, comp);
+                }
+
+            }
+
+            apr_brigade_cleanup(ctx->bb);
+
+		}
         else {
             return rv;
         }
 
-    }
-
-    // FIXME wrong - assumes we'll get all data in one go */
-
-    buffer = apr_palloc(f->r->pool, len + 1);
-    if ((rv = apr_brigade_flatten(bb, buffer, &len)) != APR_SUCCESS) {
-        return rv;
-    }
-    buffer[len] = 0;
-
-    // FIXME use icalparser_add_line instead
-
-    comp = icalparser_parse_string(buffer);
-    if(icalerrno != ICAL_NO_ERROR) {
-        if (comp) {
-            icalcomponent_free(comp);
-        }
-        ctx->err = dav_new_error(f->r->pool, HTTP_INTERNAL_SERVER_ERROR, 0, APR_EGENERAL,
-                icalerror_perror());
-        return APR_EGENERAL;
-    }
-
-    if (!comp) {
-        return APR_EGENERAL;
-    }
-
-	ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
-			DAV_CALENDAR_XML_NAMESPACE);
-
-    /* apply search <C:filter/>, ctx->match will contain the result */
-    ctx->err = dav_calendar_filter(ctx, comp);
-    if (ctx->err) {
-        icalcomponent_free(comp);
-        return APR_EGENERAL;
-    }
-
-    /* strip away everything not listed beneath <C:comp/> */
-    ctx->err = dav_calendar_comp(ctx, ctx->element->elem, &comp);
-    if (ctx->err) {
-        icalcomponent_free(comp);
-        return APR_EGENERAL;
-    }
-
-    if (!ctx->comp) {
-        ctx->comp = comp;
-        apr_pool_cleanup_register(f->r->pool, comp, icalcomponent_cleanup,
-                apr_pool_cleanup_null);
-    }
-    else {
-        icalcomponent_merge_component(ctx->comp, comp);
     }
 
     return APR_SUCCESS;
@@ -1782,7 +1796,15 @@ static ap_filter_t *dav_calendar_create_parse_icalendar_filter(request_rec *r,
     f->frec = rec;
     f->r = r;
     f->ctx = ctx;
-    ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces, DAV_CALENDAR_XML_NAMESPACE);
+
+	ctx->ns = apr_xml_insert_uri(ctx->element->doc->namespaces,
+			DAV_CALENDAR_XML_NAMESPACE);
+    ctx->bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
+
+    ctx->parser = icalparser_new();
+
+    apr_pool_cleanup_register(f->r->pool, ctx->parser, icalparser_cleanup,
+            apr_pool_cleanup_null);
 
     return f;
 }
