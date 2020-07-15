@@ -163,6 +163,8 @@ static const dav_hooks_liveprop dav_hooks_liveprop_calendar;
 #define DAV_CALENDAR_COLLATION_ASCII_CASEMAP "i;ascii-casemap"
 #define DAV_CALENDAR_COLLATION_OCTET "i;octet"
 
+#define DAV_CALENDAR_SKIP "mod_dav_calendar-skip"
+
 /* MKCALENDAR method */
 static int iM_MKCALENDAR;
 
@@ -2220,7 +2222,6 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
                 return DAV_PROP_INSERT_NOTDEF;
             }
 
-            // FIXME: if there is no match, we want the entire resource to vanish from results
             if (ctx.match && ctx.comp) {
 
                 apr_text_append(p, phdr, apr_psprintf(p, "<lp%d:%s>",
@@ -2232,6 +2233,13 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
 
                 apr_text_append(p, phdr, apr_psprintf(p, "</lp%d:%s>" DEBUG_CR,
                         global_ns, info->name));
+
+            }
+            else {
+
+                /* if there is no match, we want the entire resource to vanish from results */
+                apr_pool_userdata_setn(DAV_CALENDAR_SKIP, DAV_CALENDAR_SKIP, NULL,
+                    resource->pool);
 
             }
 
@@ -2673,6 +2681,7 @@ static dav_error * dav_calendar_report_walker(dav_walk_resource *wres, int callt
     dav_error *err = NULL;
     dav_propdb *propdb;
     dav_get_props_result propstats = { 0 };
+    void *skip;
 
     /* ignore collections */
     if (wres->resource->collection) {
@@ -2727,7 +2736,13 @@ static dav_error * dav_calendar_report_walker(dav_walk_resource *wres, int callt
                                  : DAV_PROP_INSERT_NAME;
         propstats = dav_get_allprops(propdb, what);
     }
-    dav_stream_response(wres, 0, &propstats, ctx->scratchpool);
+
+    /* only send a response if we're not skipped */
+    apr_pool_userdata_get(&skip, DAV_CALENDAR_SKIP, wres->resource->pool);
+
+    if (!skip) {
+        dav_stream_response(wres, 0, &propstats, ctx->scratchpool);
+    }
 
     dav_close_propdb(propdb);
 
