@@ -1876,6 +1876,105 @@ static dav_error *dav_calendar_comp(dav_calendar_ctx *ctx,
     return NULL;
 }
 
+static apr_status_t dav_calendar_brigade_split_folded_line(apr_bucket_brigade *bbOut,
+                                                           apr_bucket_brigade *bbIn,
+                                                           apr_read_type_e block,
+                                                           apr_off_t maxbytes)
+{
+    apr_off_t readbytes = 0;
+    int state = 0;
+
+    while (!APR_BRIGADE_EMPTY(bbIn)) {
+        const char *pos = NULL;
+        const char *str;
+        apr_size_t len;
+        apr_status_t rv;
+        apr_bucket *e;
+
+        e = APR_BRIGADE_FIRST(bbIn);
+        rv = apr_bucket_read(e, &str, &len, block);
+
+        if (rv != APR_SUCCESS) {
+            return rv;
+        }
+
+        if (state == 0) {
+            pos = memchr(str, APR_ASCII_CR, len);
+            if (pos) {
+                len = pos - str;
+                apr_bucket_split(e, len);
+                state = APR_ASCII_CR;
+            }
+            else {
+                pos = memchr(str, APR_ASCII_LF, len);
+                if (pos) {
+                    len = pos - str;
+                    apr_bucket_split(e, len);
+                    state = APR_ASCII_LF;
+                }
+            }
+        }
+
+        else if (state == APR_ASCII_CR) {
+            if (len) {
+                if (*str == APR_ASCII_CR) {
+                    apr_bucket_split(e, 1);
+                    apr_bucket_delete(e);
+                    state = APR_ASCII_LF;
+                    continue;
+                }
+            }
+        }
+
+        else if (state == APR_ASCII_LF) {
+            if (len) {
+                if (*str == APR_ASCII_LF) {
+                    apr_bucket_split(e, 1);
+                    apr_bucket_delete(e);
+                    state = APR_ASCII_BLANK;
+                    continue;
+                }
+            }
+        }
+
+        else if (state == APR_ASCII_BLANK) {
+            if (len) {
+                if (*str == APR_ASCII_BLANK || *str == APR_ASCII_TAB) {
+                    apr_bucket_split(e, 1);
+                    apr_bucket_delete(e);
+                    state = 0;
+                    continue;
+                }
+                else {
+                    return APR_SUCCESS;
+                }
+            }
+        }
+
+        readbytes += len;
+
+        APR_BUCKET_REMOVE(e);
+        if (APR_BUCKET_IS_METADATA(e) || len > APR_BUCKET_BUFF_SIZE/4) {
+            APR_BRIGADE_INSERT_TAIL(bbOut, e);
+        }
+        else {
+            if (len > 0) {
+                rv = apr_brigade_write(bbOut, NULL, NULL, str, len);
+                if (rv != APR_SUCCESS) {
+                    return rv;
+                }
+            }
+            apr_bucket_destroy(e);
+        }
+        /* We didn't find a CRLF within the maximum line length. */
+        if (readbytes >= maxbytes) {
+            break;
+        }
+    }
+
+    return APR_SUCCESS;
+}
+
 static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
         apr_bucket_brigade *bb)
 {
@@ -1892,17 +1991,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     apr_status_t rv = APR_SUCCESS;
 
 
-    /*
-     * Alas the libical library does not have a way to parse a buffer
-     * of fixed length, only a NUL terminated string. To avoid us having
-     * to create NUL terminated strings, suck the whole lot in in one go.
-     */
-
-    /* first pass - how long is the brigade? */
-    for (e = APR_BRIGADE_FIRST(bb);
-         e != APR_BRIGADE_SENTINEL(bb);
-         e = APR_BUCKET_NEXT(e))
-    {
+    while (!APR_BRIGADE_EMPTY(bb)) {
 
         e = APR_BRIGADE_FIRST(bb);
 
@@ -1913,7 +2002,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
 
         /* grab a line of max HUGE_STRING_LEN - RFC5545 says SHOULD be 75 chars, not MUST */
         if (APR_SUCCESS
-                == (rv = apr_brigade_split_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
+                == (rv = dav_calendar_brigade_split_folded_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
             apr_off_t offset = 0;
             apr_size_t size = 0;
 
