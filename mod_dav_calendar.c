@@ -1879,10 +1879,10 @@ static dav_error *dav_calendar_comp(dav_calendar_ctx *ctx,
 static apr_status_t dav_calendar_brigade_split_folded_line(apr_bucket_brigade *bbOut,
                                                            apr_bucket_brigade *bbIn,
                                                            apr_read_type_e block,
-                                                           apr_off_t maxbytes)
+                                                           apr_off_t maxbytes,
+                                                           int *state)
 {
     apr_off_t readbytes = 0;
-    int state = 0;
 
     while (!APR_BRIGADE_EMPTY(bbIn)) {
         const char *pos = NULL;
@@ -1898,57 +1898,63 @@ static apr_status_t dav_calendar_brigade_split_folded_line(apr_bucket_brigade *b
             return rv;
         }
 
-        if (state == 0) {
+        if (*state == 0) {
             pos = memchr(str, APR_ASCII_CR, len);
             if (pos) {
                 len = pos - str;
                 apr_bucket_split(e, len);
-                state = APR_ASCII_CR;
+                *state = APR_ASCII_CR;
             }
             else {
                 pos = memchr(str, APR_ASCII_LF, len);
                 if (pos) {
                     len = pos - str;
                     apr_bucket_split(e, len);
-                    state = APR_ASCII_LF;
+                    *state = APR_ASCII_LF;
                 }
             }
         }
 
-        else if (state == APR_ASCII_CR) {
+        else if (*state == APR_ASCII_CR) {
             if (len) {
                 if (*str == APR_ASCII_CR) {
                     apr_bucket_split(e, 1);
                     apr_bucket_delete(e);
-                    state = APR_ASCII_LF;
+                    *state = APR_ASCII_LF;
                     continue;
                 }
             }
         }
 
-        else if (state == APR_ASCII_LF) {
+        else if (*state == APR_ASCII_LF) {
             if (len) {
                 if (*str == APR_ASCII_LF) {
                     apr_bucket_split(e, 1);
                     apr_bucket_delete(e);
-                    state = APR_ASCII_BLANK;
+                    *state = APR_ASCII_BLANK;
                     continue;
                 }
             }
         }
 
-        else if (state == APR_ASCII_BLANK) {
+        else if (*state == APR_ASCII_BLANK) {
             if (len) {
                 if (*str == APR_ASCII_BLANK || *str == APR_ASCII_TAB) {
                     apr_bucket_split(e, 1);
                     apr_bucket_delete(e);
-                    state = 0;
+                    *state = 0;
                     continue;
                 }
                 else {
+                    *state = 0;
                     return APR_SUCCESS;
                 }
             }
+        }
+
+        else {
+            /* invalid state - fail outright */
+            return APR_EINVAL;
         }
 
         readbytes += len;
@@ -1989,6 +1995,7 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
     char *buffer;
     apr_size_t len = 0;
     apr_status_t rv = APR_SUCCESS;
+    int state = 0;
 
 
     while (!APR_BRIGADE_EMPTY(bb)) {
@@ -2002,7 +2009,8 @@ static int dav_calendar_parse_icalendar_filter(ap_filter_t *f,
 
         /* grab a line of max HUGE_STRING_LEN - RFC5545 says SHOULD be 75 chars, not MUST */
         if (APR_SUCCESS
-                == (rv = dav_calendar_brigade_split_folded_line(ctx->bb, bb, 1, HUGE_STRING_LEN))) {
+                == (rv = dav_calendar_brigade_split_folded_line(ctx->bb, bb, 1,
+                        HUGE_STRING_LEN, &state))) {
             apr_off_t offset = 0;
             apr_size_t size = 0;
 
