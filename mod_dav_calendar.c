@@ -2387,7 +2387,12 @@ static int dav_calendar_find_liveprop(const dav_resource *resource,
 static dav_error *dav_calendar_options_header(request_rec *r,
         const dav_resource *resource, apr_text_header *phdr)
 {
-    apr_text_append(r->pool, phdr, "calendar-access");
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+            &dav_calendar_module);
+
+    if (conf && conf->dav_calendar) {
+        apr_text_append(r->pool, phdr, "calendar-access");
+    }
 
     return NULL;
 }
@@ -2395,8 +2400,13 @@ static dav_error *dav_calendar_options_header(request_rec *r,
 static dav_error *dav_calendar_options_method(request_rec *r,
         const dav_resource *resource, apr_text_header *phdr)
 {
-    apr_text_append(r->pool, phdr, "MKCALENDAR");
-    apr_text_append(r->pool, phdr, "REPORT");
+    dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
+            &dav_calendar_module);
+
+    if (conf && conf->dav_calendar) {
+        apr_text_append(r->pool, phdr, "MKCALENDAR");
+        apr_text_append(r->pool, phdr, "REPORT");
+    }
 
     return NULL;
 }
