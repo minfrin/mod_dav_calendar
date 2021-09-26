@@ -1071,7 +1071,7 @@ static dav_error *dav_calendar_freebusy_time_range(dav_calendar_ctx *ctx,
         icalcomponent *comp, icaltimetype *stt, icaltimetype *ett)
 {
 
-    icalcomponent *freebusy, *cp, *next;
+    icalcomponent *freebusy, *cp, *next = NULL;
 
     /*
      * Only VEVENT components without a TRANSP property or with the TRANSP
@@ -2167,11 +2167,9 @@ static dav_prop_insert dav_calendar_insert_prop(const dav_resource *resource,
         switch (propid) {
         case DAV_CALENDAR_PROPID_calendar_data: {
             dav_error *err;
-            dav_liveprop_elem *element;
+            dav_liveprop_elem *element = dav_get_liveprop_element(resource);
             dav_calendar_ctx ctx = { 0 };
             ctx.r = r;
-
-            apr_pool_userdata_get((void **)&element, DAV_PROP_ELEMENT, resource->pool);
 
             if (element) {
                 ctx.doc = element->doc;
