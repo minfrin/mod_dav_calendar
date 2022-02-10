@@ -1180,7 +1180,7 @@ static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
     int found = 0;
     while (param) {
 
-        const char *prname;
+        const char *prname = NULL;
 
         icalparameter_kind kind = icalparameter_isa(param);
 
@@ -1193,7 +1193,7 @@ static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
 
         elem = param_filter;
 
-        while (elem) {
+        while (prname && elem) {
 
             name = dav_find_attr_ns(elem, APR_XML_NS_NONE, "name");
             if (!name) {
@@ -1206,7 +1206,7 @@ static dav_error *dav_calendar_param_filter(dav_calendar_ctx *ctx,
             }
 
             /* matched our name? found it */
-            if (prname && name->value && !strcmp(prname, name->value)) {
+            if (name->value && !strcmp(prname, name->value)) {
                 found = 1;
                 break;
             }
