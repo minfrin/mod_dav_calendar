@@ -10,6 +10,23 @@ client at a single URL that can be subscribed to by another calendar client.
 
 Requires Apache httpd v2.4.52 or higher.
 
+# download
+
+RPM Packages are available at
+[COPR](https://copr.fedorainfracloud.org/coprs/minfrin/mod_dav_calendar/) for Fedora and OpenSUSE.
+
+```
+dnf copr enable minfrin/mod_dav_calendar
+dnf install mod_dav_calendar
+```
+
+If you need to depend on mod_dav_access, enable it as follows:
+
+```
+dnf copr enable minfrin/mod_dav_access
+dnf install mod_dav_access
+```
+
 # quick configuration
 
     <IfModule !dav_module>
