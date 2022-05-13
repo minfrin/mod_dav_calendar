@@ -1,4 +1,9 @@
 
+Changes with v0.1.1
+
+ *) Fix a segfault when logging the inability to autoprovision.
+    [Graham Leggett]
+
 Changes with v0.1.0
 
  *) Initial import of mod_dav_calendar. [Graham Leggett]

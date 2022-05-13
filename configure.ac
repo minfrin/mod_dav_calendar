@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(mod_dav_calendar, 0.1.0, minfrin@sharp.fm)
+AC_INIT(mod_dav_calendar, 0.1.1, minfrin@sharp.fm)
 AM_INIT_AUTOMAKE([dist-bzip2])
 AC_CONFIG_FILES([Makefile mod_dav_calendar.spec])
 AC_CONFIG_SRCDIR([mod_dav_calendar.c])

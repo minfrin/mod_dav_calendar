@@ -3463,7 +3463,7 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *
         return dav_new_error(r->pool, HTTP_METHOD_NOT_ALLOWED, 0, 0,
                              apr_psprintf(r->pool,
                              "DAV not enabled for %s",
-                             ap_escape_html(r->pool, resource->uri)));
+                             ap_escape_html(r->pool, r->unparsed_uri)));
     }
 
     /* resolve calendar resource */
@@ -3471,7 +3471,7 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *
         return dav_push_error(r->pool, err->status, 0,
                               apr_psprintf(r->pool,
                                            "Could not get calendar provision URL: %s",
-                                           ap_escape_html(r->pool, resource->uri)),
+                                           ap_escape_html(r->pool, r->unparsed_uri)),
                               err);
     }
 
