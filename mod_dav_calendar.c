@@ -140,6 +140,11 @@ typedef struct {
     ap_regex_t *regexp;
 } dav_calendar_alias_entry;
 
+typedef struct {
+    ap_expr_info_t *provision;
+    ap_expr_info_t *displayname;
+} dav_calendar_provision_entry;
+
 typedef struct
 {
     apr_array_header_t *aliases;
@@ -3325,7 +3330,7 @@ static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *reso
     return NULL;
 }
 
-static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resource)
+static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resource, const char *name)
 {
     dav_error *err;
     const dav_provider *provider;
@@ -3392,10 +3397,11 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
         else {
 
             apr_array_header_t *ns;
-            apr_xml_elem elem[2] = { { 0 } };
-            apr_text text[2] = { { 0 } };
-            dav_prop_name restype[2] = { { DAV_XML_NAMESPACE, "resourcetype" },
-                    { DAV_CALENDAR_XML_NAMESPACE, "calendar-timezone" } };
+            apr_xml_elem elem[3] = { { 0 } };
+            apr_text text[3] = { { 0 } };
+            dav_prop_name restype[3] = { { DAV_XML_NAMESPACE, "resourcetype" },
+                    { DAV_CALENDAR_XML_NAMESPACE, "calendar-timezone" },
+                    { DAV_XML_NAMESPACE, "displayname" } };
             dav_namespace_map *map = NULL;
 
             ns = apr_array_make(resource->pool, 3, sizeof(const char *));
@@ -3435,6 +3441,23 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
                                       err);
             }
 
+            if (name) {
+
+                elem[2].name = restype[2].name;
+                elem[2].ns = 0;
+                elem[2].first_cdata.first = &text[2];
+                text[2].text = name;
+
+                if ((err =  provider->propdb->store(db, &restype[2], &elem[2], map)) != NULL) {
+                    err = dav_push_error(r->pool, err->status, 0,
+                                          "Property 'displayname' could not be stored, "
+                                          "preventing the creation of a "
+                                          "calendar collection.",
+                                          err);
+                }
+
+            }
+
             provider->propdb->close(db);
 
         }
@@ -3449,7 +3472,7 @@ static dav_error *dav_calendar_make_calendar(request_rec *r, dav_resource *resou
     return err;
 }
 
-static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *trigger)
+static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *trigger, const char *name)
 {
     dav_error *err;
     const dav_provider *provider;
@@ -3509,10 +3532,10 @@ static dav_error *dav_calendar_provision_calendar(request_rec *r, dav_resource *
 
     /* create calendar */
     if (trigger->hooks->is_same_resource(trigger, resource)) {
-        err = dav_calendar_make_calendar(r, trigger);
+        err = dav_calendar_make_calendar(r, trigger, name);
     }
     else {
-        err = dav_calendar_make_calendar(r, resource);
+        err = dav_calendar_make_calendar(r, resource, name);
     }
 
     return err;
@@ -3524,7 +3547,7 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
     dav_calendar_config_rec *conf = ap_get_module_config(r->per_dir_config,
             &dav_calendar_module);
 
-    ap_expr_info_t **provs = (ap_expr_info_t **)conf->dav_calendar_provisions->elts;
+    dav_calendar_provision_entry *provs = (dav_calendar_provision_entry *)conf->dav_calendar_provisions->elts;
     int i;
 
     if (!conf->dav_calendar_provisions->nelts) {
@@ -3532,50 +3555,60 @@ static int dav_calendar_auto_provision(request_rec *r, dav_resource *resource,
     }
 
     for (i = 0; i < conf->dav_calendar_provisions->nelts; ++i) {
-        const char *error = NULL, *path;
+        const char *error = NULL, *path, *name;
 
-        path = ap_expr_str_exec(r, provs[i], &error);
+        dav_lookup_result lookup = { 0 };
+
+        path = ap_expr_str_exec(r, provs[i].provision, &error);
         if (error) {
             *err = dav_new_error(r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
                     apr_psprintf(r->pool, "Could not evaluate calendar provision URL: %s",
                             error));
             return DONE;
         }
-        else {
-            dav_lookup_result lookup = { 0 };
 
-            /* sanity - if no path prefix, skip */
-            if (strncmp(r->uri, path, strlen(r->uri))) {
-                continue;
-            }
-
-            lookup = dav_lookup_uri(path, r, 0 /* must_be_absolute */);
-
-            if (lookup.rnew == NULL) {
-                *err = dav_new_error(r->pool, lookup.err.status, 0, APR_SUCCESS,
-                        lookup.err.desc);
-            }
-            if (lookup.rnew->status != HTTP_OK) {
-                *err = dav_new_error(r->pool, lookup.rnew->status, 0, APR_SUCCESS,
-                        apr_psprintf(r->pool, "Could not lookup calendar provision URL: %s", path));
-            }
-
-            /* make the calendar */
-            *err = dav_calendar_provision_calendar(lookup.rnew, resource);
-            if (*err != NULL) {
-                return DONE;
-            }
-
-            ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r,
-                            "mod_dav_calendar: Auto provisioned %s", lookup.rnew->uri);
-
-            /* clean up */
-            if (lookup.rnew) {
-                ap_destroy_sub_req(lookup.rnew);
-            }
-
+        /* sanity - if no path prefix, skip */
+        if (strncmp(r->uri, path, strlen(r->uri))) {
+            continue;
         }
 
+        if (provs[i].displayname) {
+            name = ap_expr_str_exec(r, provs[i].displayname, &error);
+            if (error) {
+                *err = dav_new_error(r->pool, HTTP_FORBIDDEN, 0, APR_SUCCESS,
+                        apr_psprintf(r->pool, "Could not evaluate calendar provision name: %s",
+                                error));
+                return DONE;
+            }
+        }
+        else {
+            name = NULL;
+        }
+
+        lookup = dav_lookup_uri(path, r, 0 /* must_be_absolute */);
+
+        if (lookup.rnew == NULL) {
+            *err = dav_new_error(r->pool, lookup.err.status, 0, APR_SUCCESS,
+                    lookup.err.desc);
+        }
+        if (lookup.rnew->status != HTTP_OK) {
+            *err = dav_new_error(r->pool, lookup.rnew->status, 0, APR_SUCCESS,
+                    apr_psprintf(r->pool, "Could not lookup calendar provision URL: %s", path));
+        }
+
+        /* make the calendar */
+        *err = dav_calendar_provision_calendar(lookup.rnew, resource, name);
+        if (*err != NULL) {
+            return DONE;
+        }
+
+        ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r,
+                        "mod_dav_calendar: Auto provisioned %s", lookup.rnew->uri);
+
+        /* clean up */
+        if (lookup.rnew) {
+            ap_destroy_sub_req(lookup.rnew);
+        }
     }
 
     return DONE;
@@ -3598,8 +3631,8 @@ static void *create_dav_calendar_dir_config(apr_pool_t *p, char *d)
     conf->dav_calendar_timezone = DEFAULT_TIMEZONE;
     conf->max_resource_size = DEFAULT_MAX_RESOURCE_SIZE;
 
-    conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(const char *));
-    conf->dav_calendar_provisions = apr_array_make(p, 2, sizeof(const char *));
+    conf->dav_calendar_homes = apr_array_make(p, 2, sizeof(ap_expr_info_t *));
+    conf->dav_calendar_provisions = apr_array_make(p, 2, sizeof(dav_calendar_provision_entry));
 
     return conf;
 }
@@ -3708,20 +3741,32 @@ static const char *add_dav_calendar_home(cmd_parms *cmd, void *dconf, const char
     return NULL;
 }
 
-static const char *add_dav_calendar_provision(cmd_parms *cmd, void *dconf, const char *prov)
+static const char *add_dav_calendar_provision(cmd_parms *cmd, void *dconf, const char *prov, const char *name)
 {
     dav_calendar_config_rec *conf = dconf;
     const char *expr_err = NULL;
 
-    ap_expr_info_t **provs = apr_array_push(conf->dav_calendar_provisions);
+    dav_calendar_provision_entry *provs = apr_array_push(conf->dav_calendar_provisions);
 
-    (*provs) = ap_expr_parse_cmd(cmd, prov, AP_EXPR_FLAG_STRING_RESULT,
+    provs->provision = ap_expr_parse_cmd(cmd, prov, AP_EXPR_FLAG_STRING_RESULT,
             &expr_err, NULL);
 
     if (expr_err) {
         return apr_pstrcat(cmd->temp_pool,
                 "Cannot parse expression '", prov, "': ",
                 expr_err, NULL);
+    }
+
+    if (name) {
+
+        provs->displayname = ap_expr_parse_cmd(cmd, name, AP_EXPR_FLAG_STRING_RESULT,
+                &expr_err, NULL);
+
+        if (expr_err) {
+            return apr_pstrcat(cmd->temp_pool,
+                    "Cannot parse expression '", name, "': ",
+                    expr_err, NULL);
+        }
     }
 
     return NULL;
@@ -3780,8 +3825,10 @@ static const command_rec dav_calendar_cmds[] =
     AP_INIT_TAKE1("DavCalendarHome", add_dav_calendar_home, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for the calendar home. "
         "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}\"."),
-    AP_INIT_TAKE1("DavCalendarProvision", add_dav_calendar_provision, NULL, RSRC_CONF | ACCESS_CONF,
+    AP_INIT_TAKE12("DavCalendarProvision", add_dav_calendar_provision, NULL, RSRC_CONF | ACCESS_CONF,
         "Set the URL template to use for calendar auto provision. "
+        "If provided, the name is given to the displayname property, otherwise the name is "
+        "set to the path to the right of the last slash, if present. "
         "Recommended value is \"/calendars/%{escape:%{REMOTE_USER}}/Home\"."),
     AP_INIT_TAKE2("DavCalendarAlias", add_dav_calendar_alias, NULL, RSRC_CONF | ACCESS_CONF,
         "Calendar alias and the real calendar collection."),
@@ -4051,7 +4098,7 @@ static int dav_calendar_handle_mkcalendar(request_rec *r)
     }
 
     /* create calendar */
-    if ((err = dav_calendar_make_calendar(r, resource)) != NULL) {
+    if ((err = dav_calendar_make_calendar(r, resource, NULL)) != NULL) {
         dav_auto_checkin(r, NULL, err != NULL /* undo if error */,
                 0 /*unlock*/, &av_info);
         return dav_handle_err(r, err, NULL);
