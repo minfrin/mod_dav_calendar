@@ -123,9 +123,9 @@ module AP_MODULE_DECLARE_DATA dav_calendar_module;
 
 typedef struct
 {
-    int dav_calendar_set :1;
-    int dav_calendar_timezone_set :1;
-    int max_resource_size_set :1;
+    unsigned int dav_calendar_set :1;
+    unsigned int dav_calendar_timezone_set :1;
+    unsigned int max_resource_size_set :1;
     apr_array_header_t *dav_calendar_homes;
     apr_array_header_t *dav_calendar_provisions;
     const char *dav_calendar_timezone;
@@ -429,7 +429,7 @@ static int dav_calendar_text_match_octet(const char *match, const char *text)
      * substring operation returns "no-match".
      */
 
-    if (strstr(text, match)) {
+    if (strstr((char *)text, match)) {
         return 1;
     }
 
@@ -2511,7 +2511,7 @@ static int dav_calendar_get_resource_type(const dav_resource *resource,
                             break;
                         }
 
-                        if (strstr(hdr->first->text, ">calendar<")) {
+                        if (strstr((char *)hdr->first->text, ">calendar<")) {
 
                             *type = "calendar";
                             *uri = DAV_CALENDAR_XML_NAMESPACE;
@@ -3292,7 +3292,7 @@ static dav_error *dav_calendar_check_calender(request_rec *r, dav_resource *reso
                                 return err;
                             }
 
-                            if (strstr(hdr->first->text, ">calendar<")) {
+                            if (strstr((char *)hdr->first->text, ">calendar<")) {
 
                                 err = dav_new_error(r->pool, HTTP_CONFLICT, 0, 0,
                                         apr_psprintf(r->pool,

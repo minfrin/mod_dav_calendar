@@ -1,8 +1,10 @@
 
 Changes with v0.2.0
 
+ *) Silence compiler warnings on MacOS. [Graham Leggett]
+
  *) Allow a specific displayname when provisioning a calendar.
-     [Graham Leggett]
+    [Graham Leggett]
 
  *) Fix a segfault when logging the inability to autoprovision.
     [Graham Leggett]
