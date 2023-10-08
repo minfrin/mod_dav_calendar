@@ -1,5 +1,8 @@
 
-Changes with v0.1.1
+Changes with v0.2.0
+
+ *) Allow a specific displayname when provisioning a calendar.
+     [Graham Leggett]
 
  *) Fix a segfault when logging the inability to autoprovision.
     [Graham Leggett]
